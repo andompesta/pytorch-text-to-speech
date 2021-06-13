@@ -21,7 +21,7 @@ httptools==0.0.13
 pydantic==1.6.2
 starlette==0.12.9
 toml==0.10.0
-uvicorn==0.9.0
+uvicorn==0.11.7
 uvloop==0.13.0
 websockets==9.1
 numpy
