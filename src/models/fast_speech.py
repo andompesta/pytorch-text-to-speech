@@ -9,7 +9,10 @@ import torch.nn.functional as F
 
 from src.modules.transformers import Encoder, Decoder, PostNet
 from src.modules import VarianceAdaptor
-from src.utils.tools import get_mask_from_lengths
+from src.utils import (
+    get_mask_from_lengths,
+    fast_speech_weight_mapping
+)
 
 
 class FastSpeech2(nn.Module):
@@ -120,9 +123,10 @@ class FastSpeech2(nn.Module):
         cls, 
         preprocess_config: dict,
         model_config: dict,
+        device: Union[torch.device, str] = "cpu",
         restore_step: Optional[int] = 900000,
         ckpt_path: Optional[str] = "./output/ckpt/LJSpeech",
-        device: Union[torch.device, str] = "cpu",
+        mapping_fn = fast_speech_weight_mapping,
         train: bool = False
     ):
 
@@ -133,13 +137,10 @@ class FastSpeech2(nn.Module):
                 "{}.pth.tar".format(restore_step),
             )
             ckpt = torch.load(ckpt_path, map_location="cpu")
-            ckpt_model = OrderedDict()
-            for name, param in ckpt["model"].items():
-                if "conv_layer" is in name:
-                    name.split("conv")                
-                else:
-                    ckpt_model[name] = param
-            model.load_state_dict(ckpt["model"])
+            state_dict = ckpt.get("model")
+            if mapping_fn is not None:
+                state_dict = mapping_fn(state_dict)
+            model.load_state_dict(state_dict)
 
         model = model.to(device)
 
