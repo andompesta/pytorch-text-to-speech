@@ -1,6 +1,9 @@
+from collections import OrderedDict
 import os
 import json
+from typing import Union, Optional
 
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -111,3 +114,40 @@ class FastSpeech2(nn.Module):
             src_lens,
             mel_lens,
         )
+
+    @classmethod
+    def build(
+        cls, 
+        preprocess_config: dict,
+        model_config: dict,
+        restore_step: Optional[int] = 900000,
+        ckpt_path: Optional[str] = "./output/ckpt/LJSpeech",
+        device: Union[torch.device, str] = "cpu",
+        train: bool = False
+    ):
+
+        model = cls(preprocess_config, model_config)
+        if restore_step is not None and ckpt_path is not None:
+            ckpt_path = os.path.join(
+                ckpt_path,
+                "{}.pth.tar".format(restore_step),
+            )
+            ckpt = torch.load(ckpt_path, map_location="cpu")
+            ckpt_model = OrderedDict()
+            for name, param in ckpt["model"].items():
+                if "conv_layer" is in name:
+                    name.split("conv")                
+                else:
+                    ckpt_model[name] = param
+            model.load_state_dict(ckpt["model"])
+
+        model = model.to(device)
+
+        if train:
+            model = model.train()
+            model.requires_grad_ = True
+        else:
+            model = model.eval()
+            model.requires_grad_ = False
+        
+        return model
