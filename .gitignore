@@ -1,6 +1,7 @@
 .vscode
 .env
-output
+output/
+lexicon/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
