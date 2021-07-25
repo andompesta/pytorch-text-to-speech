@@ -17,7 +17,7 @@ class VarianceAdaptor(nn.Module):
     def __init__(
         self,
         preprocess_config: dict,
-        model_config: dict
+        model_config: dict,
     ):
         super(VarianceAdaptor, self).__init__()
         self.duration_predictor = VariancePredictor(model_config)
@@ -125,6 +125,7 @@ class VarianceAdaptor(nn.Module):
         e_control=1.0,
         d_control=1.0,
     ):
+        device = next(self.parameters()).device
 
         log_duration_prediction = self.duration_predictor(x, src_mask)
         if self.pitch_feature_level == "phoneme_level":
@@ -145,14 +146,24 @@ class VarianceAdaptor(nn.Module):
             x = x + energy_embedding
 
         if duration_target is not None:
-            x, mel_len = self.length_regulator(x, duration_target, max_len)
+            x, mel_len = self.length_regulator(
+                x,
+                duration_target,
+                max_len,
+                device
+            )
             duration_rounded = duration_target
         else:
             duration_rounded = torch.clamp(
                 (torch.round(torch.exp(log_duration_prediction) - 1) * d_control),
                 min=0,
             )
-            x, mel_len = self.length_regulator(x, duration_rounded, max_len)
+            x, mel_len = self.length_regulator(
+                x,
+                duration_rounded,
+                max_len,
+                device
+            )
             mel_mask = get_mask_from_lengths(mel_len)
 
         if self.pitch_feature_level == "frame_level":

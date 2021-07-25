@@ -1,6 +1,6 @@
 import os
 import json
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -11,10 +11,6 @@ from matplotlib import pyplot as plt
 
 
 matplotlib.use("Agg")
-
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 def to_device(data, device):
     if len(data) == 12:
@@ -67,29 +63,12 @@ def to_device(data, device):
         return (ids, raw_texts, speakers, texts, src_lens, max_src_len)
 
 
-def log(
-    logger, step=None, losses=None, fig=None, audio=None, sampling_rate=22050, tag=""
+
+def get_mask_from_lengths(
+    lengths,
+    max_len: Optional[int]=None,
+    device: Union[torch.device, str] = "cpu"
 ):
-    if losses is not None:
-        logger.add_scalar("Loss/total_loss", losses[0], step)
-        logger.add_scalar("Loss/mel_loss", losses[1], step)
-        logger.add_scalar("Loss/mel_postnet_loss", losses[2], step)
-        logger.add_scalar("Loss/pitch_loss", losses[3], step)
-        logger.add_scalar("Loss/energy_loss", losses[4], step)
-        logger.add_scalar("Loss/duration_loss", losses[5], step)
-
-    if fig is not None:
-        logger.add_figure(tag, fig)
-
-    if audio is not None:
-        logger.add_audio(
-            tag,
-            audio / max(abs(audio)),
-            sample_rate=sampling_rate,
-        )
-
-
-def get_mask_from_lengths(lengths, max_len=None):
     batch_size = lengths.shape[0]
     if max_len is None:
         max_len = torch.max(lengths).item()
@@ -106,65 +85,9 @@ def expand(values, durations):
         out += [value] * max(0, int(d))
     return np.array(out)
 
-
-def synth_one_sample(targets, predictions, vocoder, model_config, preprocess_config):
-
-    basename = targets[0][0]
-    src_len = predictions[8][0].item()
-    mel_len = predictions[9][0].item()
-    mel_target = targets[6][0, :mel_len].detach().transpose(0, 1)
-    mel_prediction = predictions[1][0, :mel_len].detach().transpose(0, 1)
-    duration = targets[11][0, :src_len].detach().cpu().numpy()
-    if preprocess_config["preprocessing"]["pitch"]["feature"] == "phoneme_level":
-        pitch = targets[9][0, :src_len].detach().cpu().numpy()
-        pitch = expand(pitch, duration)
-    else:
-        pitch = targets[9][0, :mel_len].detach().cpu().numpy()
-    if preprocess_config["preprocessing"]["energy"]["feature"] == "phoneme_level":
-        energy = targets[10][0, :src_len].detach().cpu().numpy()
-        energy = expand(energy, duration)
-    else:
-        energy = targets[10][0, :mel_len].detach().cpu().numpy()
-
-    with open(
-        os.path.join(preprocess_config["path"]["preprocessed_path"], "stats.json")
-    ) as f:
-        stats = json.load(f)
-        stats = stats["pitch"] + stats["energy"][:2]
-
-    fig = plot_mel(
-        [
-            (mel_prediction.cpu().numpy(), pitch, energy),
-            (mel_target.cpu().numpy(), pitch, energy),
-        ],
-        stats,
-        ["Synthetized Spectrogram", "Ground-Truth Spectrogram"],
-    )
-
-    if vocoder is not None:
-        from .model import vocoder_infer
-
-        wav_reconstruction = vocoder_infer(
-            mel_target.unsqueeze(0),
-            vocoder,
-            model_config,
-            preprocess_config,
-        )[0]
-        wav_prediction = vocoder_infer(
-            mel_prediction.unsqueeze(0),
-            vocoder,
-            model_config,
-            preprocess_config,
-        )[0]
-    else:
-        wav_reconstruction = wav_prediction = None
-
-    return fig, wav_reconstruction, wav_prediction, basename
-
-
 def synth_samples(targets, predictions, vocoder, model_config, preprocess_config, path):
 
-    basenames = targets[0]
+    basenames = targets[1]
     for i in range(len(predictions[0])):
         basename = basenames[i]
         src_len = predictions[8][i].item()
@@ -182,23 +105,21 @@ def synth_samples(targets, predictions, vocoder, model_config, preprocess_config
         else:
             energy = predictions[3][i, :mel_len].detach().cpu().numpy()
 
-        with open(
-            os.path.join(preprocess_config["path"]["preprocessed_path"], "stats.json")
-        ) as f:
-            stats = json.load(f)
-            stats = stats["pitch"] + stats["energy"][:2]
+        # with open(
+        #     os.path.join(preprocess_config["path"]["preprocessed_path"], "stats.json")
+        # ) as f:
+        #     stats = json.load(f)
+        #     stats = stats["pitch"] + stats["energy"][:2]
 
-        fig = plot_mel(
-            [
-                (mel_prediction.cpu().numpy(), pitch, energy),
-            ],
-            stats,
-            ["Synthetized Spectrogram"],
-        )
-        plt.savefig(os.path.join(path, "{}.png".format(basename)))
-        plt.close()
-
-    from .model import vocoder_infer
+        # fig = plot_mel(
+        #     [
+        #         (mel_prediction.cpu().numpy(), pitch, energy),
+        #     ],
+        #     stats,
+        #     ["Synthetized Spectrogram"],
+        # )
+        # plt.savefig(os.path.join(path, "{}.png".format(basename)))
+        # plt.close()
 
     mel_predictions = predictions[1].transpose(1, 2)
     lengths = predictions[9] * preprocess_config["preprocessing"]["stft"]["hop_length"]
@@ -207,8 +128,34 @@ def synth_samples(targets, predictions, vocoder, model_config, preprocess_config
     )
 
     sampling_rate = preprocess_config["preprocessing"]["audio"]["sampling_rate"]
-    for wav, basename in zip(wav_predictions, basenames):
-        wavfile.write(os.path.join(path, "{}.wav".format(basename)), sampling_rate, wav)
+    wavfile.write(
+        os.path.join(
+            path, "{}.wav".format(targets[0])
+        ), 
+        sampling_rate,
+        np.concatenate(wav_predictions)
+    )
+
+
+def vocoder_infer(mels, vocoder, model_config, preprocess_config, lengths=None):
+    name = model_config["vocoder"]["model"]
+    with torch.no_grad():
+        if name == "MelGAN":
+            wavs = vocoder.inverse(mels / np.log(10))
+        elif name == "HiFi-GAN":
+            wavs = vocoder(mels).squeeze(1)
+
+    wavs = (
+        wavs.cpu().numpy()
+        * preprocess_config["preprocessing"]["audio"]["max_wav_value"]
+    ).astype("int16")
+    wavs = [wav for wav in wavs]
+
+    for i in range(len(mels)):
+        if lengths is not None:
+            wavs[i] = wavs[i][: lengths[i]]
+
+    return wavs
 
 
 def plot_mel(data, stats, titles):
@@ -263,7 +210,10 @@ def plot_mel(data, stats, titles):
     return fig
 
 
-def pad_1D(inputs, PAD=0):
+def pad_1D(
+    inputs: List[np.array],
+    PAD=0
+) -> np.array:
     def pad_data(x, length, PAD):
         x_padded = np.pad(
             x, (0, length - x.shape[0]), mode="constant", constant_values=PAD

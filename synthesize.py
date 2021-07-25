@@ -1,5 +1,6 @@
 import argparse
-import os 
+from src.utils.tools import pad_1D
+from typing import List, Tuple
 import re
 import yaml
 import numpy as np
@@ -15,12 +16,6 @@ from src.text import text_to_sequence
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--text",
-        type=str,
-        default=None,
-        help="raw text to synthesize, for single-sentence mode only",
-    )
     parser.add_argument(
         "--speaker_id",
         type=int,
@@ -82,33 +77,47 @@ def read_lexicon(lex_path):
                 lexicon[word.lower()] = phones
     return lexicon
 
-def preprocess_english(text, preprocess_config):
-    text = text.rstrip(punctuation)
-    lexicon = read_lexicon(preprocess_config["path"]["lexicon_path"])
+def preprocess_english(
+    texts: List[str],
+    preprocess_config
+) -> List[np.array]:
+    sequences = []
+    for text in texts:
+        text = text.rstrip(punctuation)
+        lexicon = read_lexicon(preprocess_config["path"]["lexicon_path"])
 
-    g2p = G2p()
-    phones = []
-    words = re.split(r"([,;.\-\?\!\s+])", text)
-    for w in words:
-        if w.lower() in lexicon:
-            phones += lexicon[w.lower()]
-        else:
-            phones += list(filter(lambda p: p != " ", g2p(w)))
-    phones = "{" + "}{".join(phones) + "}"
-    phones = re.sub(r"\{[^\w\s]?\}", "{sp}", phones)
-    phones = phones.replace("}{", " ")
+        g2p = G2p()
+        phones = []
+        words = re.split(r"([,;.\-\?\!\s+])", text)
+        for w in words:
+            if w.lower() in lexicon:
+                phones += lexicon[w.lower()]
+            else:
+                phones += list(filter(lambda p: p != " ", g2p(w)))
+        phones = "{" + "}{".join(phones) + "}"
+        phones = re.sub(r"\{[^\w\s]?\}", "{sp}", phones)
+        phones = phones.replace("}{", " ")
 
-    print("Raw Text Sequence: {}".format(text))
-    print("Phoneme Sequence: {}".format(phones))
-    sequence = np.array(
-        text_to_sequence(
-            phones, preprocess_config["preprocessing"]["text"]["text_cleaners"]
+        print("Raw Text Sequence: {}".format(text))
+        print("Phoneme Sequence: {}".format(phones))
+        sequence = np.array(
+            text_to_sequence(
+                phones, 
+                preprocess_config["preprocessing"]["text"]["text_cleaners"]
+            )
         )
-    )
 
-    return np.array(sequence)
+        sequences.append(sequence)
+    return sequences
 
-def synthesize(model, configs, vocoder, batchs, control_values):
+def synthesize(
+    model: torch.nn.Module,
+    configs: Tuple[dict, dict, dict],
+    vocoder: torch.nn.Module,
+    batchs: List[tuple],
+    control_values: Tuple[float, float, float],
+    device: str
+):
     preprocess_config, model_config, train_config = configs
     pitch_control, energy_control, duration_control = control_values
 
@@ -157,18 +166,43 @@ if __name__ == "__main__":
     else:
         raise NotImplementedError(name)
     
-    ids = raw_texts = [args.text[:999]]
-    speakers = np.array([args.speaker_id])
+    raw_texts = [
+        "Learning feature interactions is crucial for click-through rate (CTR) prediction in recommender systems.",
+        "In most existing deep learning models, feature interactions are either manually designed or simply enumerated.",
+        "However, enumerating all feature interactions brings large memory and computation cost.",
+        "Even worse, useless interactions may introduce noise and complicate the training process.",
+        "In this work, we propose a two-stage algorithm called Automatic Feature Interaction Selection (AutoFIS).",
+        "AutoFIS can automatically identify important feature interactions for factorization models with computational cost just equivalent to training the target model to convergence.",
+        "In the search stage, instead of searching over a discrete set of candidate feature interactions, we relax the choices to be continuous by introducing the architecture parameters.",
+        "By implementing a regularized optimizer over the architecture parameters, the model can automatically identify and remove the redundant feature interactions during the training process of the model.",
+        "In the re-train stage, we keep the architecture parameters serving as an attention unit to further boost the performance.",
+        "Offline experiments on three large-scale datasets (two public benchmarks, one private) demonstrate that AutoFIS can significantly improve various FM based models.",
+        "AutoFIS has been deployed onto the training platform of Huawei App Store recommendation service, where a 10-day online A/B test demonstrated that AutoFIS improved the DeepFM model by 20.3% and 20.1% in terms of CTR and CVR respectively."
+    ]
+
+    speakers = np.array([args.speaker_id] * len(raw_texts))
 
     if preprocess_config["preprocessing"]["text"]["language"] == "en":
-        texts = np.array([preprocess_english(args.text, preprocess_config)])
+        phonems = preprocess_english(
+            raw_texts, 
+            preprocess_config
+        )
+        
     else:
         NotImplementedError("{} language preprocessing not implemented".format(preprocess_config["preprocessing"]["text"]["language"]))
     
-    text_lens = np.array([len(texts[0])])
-    batchs = [(ids, raw_texts, speakers, texts, text_lens, max(text_lens))]
+    phonem_lens = np.array([len(p) for p in phonems])
+    phonems = pad_1D(phonems)
+    batchs = [("paper-1", raw_texts, speakers, phonems, phonem_lens, max(phonem_lens))]
 
     control_values = args.pitch_control, args.energy_control, args.duration_control
     configs = (preprocess_config, model_config, train_config)
 
-    synthesize(model, configs, vocoder, batchs, control_values)
+    synthesize(
+        model,
+        configs,
+        vocoder,
+        batchs,
+        control_values,
+        device
+    )
