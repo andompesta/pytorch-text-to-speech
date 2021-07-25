@@ -1,5 +1,0 @@
-[default]
-ckp_dir = '/home/andompesta/Projects/object-detection-pytorch-rust/checkpoint'
-run_dir = '/home/andompesta/Projects/object-detection-pytorch-rust/run'
-data_dir = '/home/andompesta/Projects/object-detection-pytorch-rust/data'
-exp_dir = '/home/andompesta/Projects/object-detection-pytorch-rust/export'

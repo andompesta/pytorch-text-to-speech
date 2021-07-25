@@ -15,7 +15,7 @@ class LengthRegulator(nn.Module):
 
     def __init__(
         self,
-        device: Optional[Union[torch.device, str]] = None
+        device: Optional[Union[torch.device, str]] = "cpu"
     ):
         super(LengthRegulator, self).__init__()
         if device is not None:

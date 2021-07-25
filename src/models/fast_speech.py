@@ -1,7 +1,8 @@
 from collections import OrderedDict
 import os
 import json
-from typing import Union, Optional
+import numpy as np
+from typing import Union, Optional, List
 
 import torch
 import torch.nn as nn
@@ -21,13 +22,18 @@ class FastSpeech2(nn.Module):
     def __init__(
         self,
         preprocess_config: dict,
-        model_config: dict
+        model_config: dict,
+        device: Union[torch.device, str]
     ):
         super(FastSpeech2, self).__init__()
         self.model_config = model_config
 
         self.encoder = Encoder(model_config)
-        self.variance_adaptor = VarianceAdaptor(preprocess_config, model_config)
+        self.variance_adaptor = VarianceAdaptor(
+            preprocess_config, 
+            model_config,
+            device
+        )
         self.decoder = Decoder(model_config)
         self.mel_linear = nn.Linear(
             model_config["transformer"]["decoder_hidden"],
@@ -48,13 +54,14 @@ class FastSpeech2(nn.Module):
                 n_speaker,
                 model_config["transformer"]["encoder_hidden"],
             )
+        self.device = device
 
     def forward(
         self,
-        speakers,
-        texts,
-        src_lens,
-        max_src_len,
+        speakers: torch.Tensor,
+        texts: torch.Tensor,
+        src_lens: Union[np.array, List[int]],
+        max_src_len: int,
         mels=None,
         mel_lens=None,
         max_mel_len=None,
@@ -65,9 +72,13 @@ class FastSpeech2(nn.Module):
         e_control=1.0,
         d_control=1.0,
     ):
-        src_masks = get_mask_from_lengths(src_lens, max_src_len)
+        src_masks = get_mask_from_lengths(
+            src_lens,
+            max_src_len
+        ).to(self.device)
+
         mel_masks = (
-            get_mask_from_lengths(mel_lens, max_mel_len)
+            get_mask_from_lengths(mel_lens, max_mel_len).to(self.device)
             if mel_lens is not None
             else None
         )
@@ -115,7 +126,7 @@ class FastSpeech2(nn.Module):
             src_masks,
             mel_masks,
             src_lens,
-            mel_lens,
+            mel_lens.detach().cpu().numpy().tolist(),
         )
 
     @classmethod
@@ -130,7 +141,12 @@ class FastSpeech2(nn.Module):
         train: bool = False
     ):
 
-        model = cls(preprocess_config, model_config)
+        model = cls(
+            preprocess_config,
+            model_config,
+            device
+        )
+
         if restore_step is not None and ckpt_path is not None:
             ckpt_path = os.path.join(
                 ckpt_path,

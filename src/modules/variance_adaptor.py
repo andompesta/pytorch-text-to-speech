@@ -17,11 +17,12 @@ class VarianceAdaptor(nn.Module):
     def __init__(
         self,
         preprocess_config: dict,
-        model_config: dict
+        model_config: dict,
+        device: Union[str, torch.device] = "cpu"
     ):
         super(VarianceAdaptor, self).__init__()
         self.duration_predictor = VariancePredictor(model_config)
-        self.length_regulator = LengthRegulator()
+        self.length_regulator = LengthRegulator(device)
         self.pitch_predictor = VariancePredictor(model_config)
         self.energy_predictor = VariancePredictor(model_config)
 

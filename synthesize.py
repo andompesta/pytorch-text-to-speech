@@ -1,5 +1,5 @@
 import argparse
-import os 
+from typing import List, Tuple
 import re
 import yaml
 import numpy as np
@@ -10,7 +10,11 @@ from pypinyin import pinyin, Style
 
 
 from src.models import FastSpeech2, Generator
-from src.utils import synth_samples, to_device
+from src.utils import (
+    synth_samples,
+    to_device,
+    pad_1D
+)
 from src.text import text_to_sequence
 
 def parse_args() -> argparse.Namespace:
@@ -82,7 +86,46 @@ def read_lexicon(lex_path):
                 lexicon[word.lower()] = phones
     return lexicon
 
-def preprocess_english(text, preprocess_config):
+# def preprocess_english(
+#     texts: List[str], 
+#     preprocess_config: dict
+# ) -> List[np.array]:
+#     sequences = []
+#     for t in texts:
+#         text = t.rstrip(punctuation)
+#         lexicon = read_lexicon(
+#             preprocess_config["path"]["lexicon_path"]
+#         )
+
+#         g2p = G2p()
+#         phones = []
+#         words = re.split(r"([,;.\-\?\!\s+])", text)
+#         for w in words:
+#             if w.lower() in lexicon:
+#                 phones += lexicon[w.lower()]
+#             else:
+#                 phones += list(filter(lambda p: p != " ", g2p(w)))
+        
+#         phones = "{" + "}{".join(phones) + "}"
+#         phones = re.sub(r"\{[^\w\s]?\}", "{sp}", phones)
+#         phones = phones.replace("}{", " ")
+
+#         print("Raw Text Sequence: {}".format(text))
+#         print("Phoneme Sequence: {}".format(phones))
+#         sequence = np.array(
+#             text_to_sequence(
+#                 phones, 
+#                 preprocess_config["preprocessing"]["text"]["text_cleaners"]
+#             )
+#         )
+#         sequences.append(sequence)
+
+#     return sequences
+
+def preprocess_english(
+    text, 
+    preprocess_config
+) -> np.array:
     text = text.rstrip(punctuation)
     lexicon = read_lexicon(preprocess_config["path"]["lexicon_path"])
 
@@ -108,7 +151,13 @@ def preprocess_english(text, preprocess_config):
 
     return np.array(sequence)
 
-def synthesize(model, configs, vocoder, batchs, control_values):
+def synthesize(
+    model: torch.nn.Module, 
+    configs: Tuple[dict, dict, dict],
+    vocoder: torch.nn.Module,
+    batchs: List[tuple],
+    control_values: Tuple[float, float, float]
+):
     preprocess_config, model_config, train_config = configs
     pitch_control, energy_control, duration_control = control_values
 
@@ -158,10 +207,37 @@ if __name__ == "__main__":
         raise NotImplementedError(name)
     
     ids = raw_texts = [args.text[:999]]
+
+    # ids = [s for s in ids]
+    # raw_texts = [s for s in raw_texts]
+    # speakers = np.array([args.speaker_id] * len(ids))
+
+    # if preprocess_config["preprocessing"]["text"]["language"] == "en":
+    #     phonems = preprocess_english(
+    #         ids,
+    #         preprocess_config
+    #     )
+    # else:
+    #     NotImplementedError("{} language preprocessing not implemented".format(preprocess_config["preprocessing"]["text"]["language"]))
+    
+
+    # phonem_lens = [p.shape[0] for p in phonems]
+    # phonems = pad_1D(phonems)
+
+    # batchs = [
+    #     (ids, raw_texts, speakers, phonems, phonem_lens, max(phonem_lens))
+    # ]
+    
+    ids = raw_texts = [args.text[:999]]
     speakers = np.array([args.speaker_id])
 
     if preprocess_config["preprocessing"]["text"]["language"] == "en":
-        texts = np.array([preprocess_english(args.text, preprocess_config)])
+        texts = np.array([
+            preprocess_english(
+                args.text, 
+                preprocess_config
+            )
+        ])
     else:
         NotImplementedError("{} language preprocessing not implemented".format(preprocess_config["preprocessing"]["text"]["language"]))
     
