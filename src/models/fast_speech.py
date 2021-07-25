@@ -21,7 +21,7 @@ class FastSpeech2(nn.Module):
     def __init__(
         self,
         preprocess_config: dict,
-        model_config: dict
+        model_config: dict,
     ):
         super(FastSpeech2, self).__init__()
         self.model_config = model_config
@@ -48,7 +48,7 @@ class FastSpeech2(nn.Module):
                 n_speaker,
                 model_config["transformer"]["encoder_hidden"],
             )
-
+        
     def forward(
         self,
         speakers,
@@ -130,7 +130,10 @@ class FastSpeech2(nn.Module):
         train: bool = False
     ):
 
-        model = cls(preprocess_config, model_config)
+        model = cls(
+            preprocess_config,
+            model_config,
+        )
         if restore_step is not None and ckpt_path is not None:
             ckpt_path = os.path.join(
                 ckpt_path,

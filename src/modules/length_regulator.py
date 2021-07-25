@@ -9,26 +9,17 @@ from src.utils.tools import pad
 class LengthRegulator(nn.Module):
     """ Length Regulator """
 
-    @property
-    def device(self):
-        return self._device
-
     def __init__(
         self,
-        device: Optional[Union[torch.device, str]] = None
     ):
         super(LengthRegulator, self).__init__()
-        if device is not None:
-            self._device = device
-        else:
-            self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
+        
     def LR(
         self,
         x: List[List[torch.Tensor]],
         duration: List[torch.Tensor],
-        max_len: Optional[int]
+        max_len: Optional[int],
+        device: Union[torch.device, str]
     ):
         output = list()
         mel_len = list()
@@ -42,7 +33,7 @@ class LengthRegulator(nn.Module):
         else:
             output = pad(output)
 
-        return output, torch.LongTensor(mel_len).to(self.device)
+        return output, torch.LongTensor(mel_len).to(device)
 
     def expand(
         self,
@@ -58,6 +49,17 @@ class LengthRegulator(nn.Module):
 
         return out
 
-    def forward(self, x, duration, max_len):
-        output, mel_len = self.LR(x, duration, max_len)
+    def forward(
+        self,
+        x,
+        duration,
+        max_len,
+        device    
+    ):
+        output, mel_len = self.LR(
+            x,
+            duration,
+            max_len,
+            device
+        )
         return output, mel_len
