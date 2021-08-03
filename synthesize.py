@@ -1,17 +1,23 @@
 import argparse
-from src.utils.tools import pad_1D
 from typing import List, Tuple
 import re
 import yaml
 import numpy as np
 import torch
+import os
 from string import punctuation
 from g2p_en import G2p
 from pypinyin import pinyin, Style
+from scipy.io import wavfile
 
 
-from src.models import FastSpeech2, Generator
-from src.utils import synth_samples, to_device
+from src.models import FastSpeech2, VocoderGenerator
+from src.utils import (
+    to_device,
+    Batch,
+    vocoder_infer,
+    pad_1D
+)
 from src.text import text_to_sequence
 
 def parse_args() -> argparse.Namespace:
@@ -114,9 +120,10 @@ def synthesize(
     model: torch.nn.Module,
     configs: Tuple[dict, dict, dict],
     vocoder: torch.nn.Module,
-    batchs: List[tuple],
+    batchs: List[Batch],
     control_values: Tuple[float, float, float],
-    device: str
+    device: str,
+    output_path: str,
 ):
     preprocess_config, model_config, train_config = configs
     pitch_control, energy_control, duration_control = control_values
@@ -126,19 +133,36 @@ def synthesize(
         with torch.no_grad():
             # Forward
             output = model(
-                *(batch[2:]),
+                batch.speakers,
+                batch.phonems,
+                batch.phonems_len,
+                batch.max_phonems_len,
                 p_control=pitch_control,
                 e_control=energy_control,
                 d_control=duration_control
             )
-            synth_samples(
-                batch,
-                output,
+            
+            # generate wave
+            mel_predictions = output[1].transpose(1, 2)
+            lengths = output[9] * preprocess_config["preprocessing"]["stft"]["hop_length"]
+            wav_predictions = vocoder_infer(
+                mel_predictions,
                 vocoder,
                 model_config,
                 preprocess_config,
-                train_config["path"]["result_path"],
+                lengths=lengths
             )
+
+            # save melmogram
+            sampling_rate = preprocess_config["preprocessing"]["audio"]["sampling_rate"]
+            wavfile.write(
+                os.path.join(
+                    output_path, "{}.wav".format(batch.doc_id)
+                ), 
+                sampling_rate,
+                np.concatenate(wav_predictions)
+            )
+
 
 if __name__ == "__main__":
     args = parse_args()
@@ -158,7 +182,7 @@ if __name__ == "__main__":
 
     if name == "HiFi-GAN":
         vocoder_config = yaml.load(open("config/hifigan/model.yaml", "r"), Loader=yaml.FullLoader)
-        vocoder = Generator.build(
+        vocoder = VocoderGenerator.build(
             vocoder_config,
             speaker=speaker,
             device=device
@@ -177,7 +201,7 @@ if __name__ == "__main__":
         "By implementing a regularized optimizer over the architecture parameters, the model can automatically identify and remove the redundant feature interactions during the training process of the model.",
         "In the re-train stage, we keep the architecture parameters serving as an attention unit to further boost the performance.",
         "Offline experiments on three large-scale datasets (two public benchmarks, one private) demonstrate that AutoFIS can significantly improve various FM based models.",
-        "AutoFIS has been deployed onto the training platform of Huawei App Store recommendation service, where a 10-day online A/B test demonstrated that AutoFIS improved the DeepFM model by 20.3% and 20.1% in terms of CTR and CVR respectively."
+        "AutoFIS has been deployed onto the training platform of Huawei App Store recommendation service, where a 10-day online A/B test demonstrated that AutoFIS improved the DeepFM model by 20.3 and 20.1 percent in terms of CTR and CVR respectively."
     ]
 
     speakers = np.array([args.speaker_id] * len(raw_texts))
@@ -191,10 +215,18 @@ if __name__ == "__main__":
     else:
         NotImplementedError("{} language preprocessing not implemented".format(preprocess_config["preprocessing"]["text"]["language"]))
     
-    phonem_lens = np.array([len(p) for p in phonems])
+    phonems_len = np.array([len(p) for p in phonems])
     phonems = pad_1D(phonems)
-    batchs = [("paper-1", raw_texts, speakers, phonems, phonem_lens, max(phonem_lens))]
-
+    batchs = [Batch(
+        doc_id="paper-4",
+        texts=raw_texts, 
+        speakers=speakers,
+        phonems=phonems,
+        phonems_len=phonems_len,
+        max_phonems_len=max(phonems_len)
+    )]
+    
+    
     control_values = args.pitch_control, args.energy_control, args.duration_control
     configs = (preprocess_config, model_config, train_config)
 
@@ -204,5 +236,6 @@ if __name__ == "__main__":
         vocoder,
         batchs,
         control_values,
-        device
+        device,
+        "./output/result/LJSpeech"
     )

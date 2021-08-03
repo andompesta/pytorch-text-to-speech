@@ -1,6 +1,6 @@
-from torch import nn
+from torch import nn, Tensor
 from torch.nn import functional as F
-from torch.nn import Conv1d, ConvTranspose1d
+from torch.nn import Conv1d
 from torch.nn.utils import weight_norm, remove_weight_norm
 
 LRELU_SLOPE = 0.1
@@ -104,11 +104,15 @@ class ResBlock(nn.Module):
         )
         self.convs2.apply(init_weights)
 
-    def forward(self, x):
+    def forward(
+        self,
+        x: Tensor,
+        lrelu_slope : float = LRELU_SLOPE
+    ) -> Tensor:
         for c1, c2 in zip(self.convs1, self.convs2):
-            xt = F.leaky_relu(x, LRELU_SLOPE)
+            xt = F.leaky_relu(x, lrelu_slope)
             xt = c1(xt)
-            xt = F.leaky_relu(xt, LRELU_SLOPE)
+            xt = F.leaky_relu(xt, lrelu_slope)
             xt = c2(xt)
             x = xt + x
         return x

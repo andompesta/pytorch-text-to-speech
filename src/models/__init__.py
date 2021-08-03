@@ -1,7 +1,9 @@
 from .fast_speech import FastSpeech2
-from .hifigan import Generator
+from .hifigan import VocoderGenerator
+from .synthesizer import Synthesizer
 
 __all__ = [
     "FastSpeech2",
-    "Generator"
+    "VocoderGenerator",
+    "Synthesizer"
 ]

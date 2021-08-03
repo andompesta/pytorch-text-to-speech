@@ -27,7 +27,12 @@ class FastSpeech2(nn.Module):
         self.model_config = model_config
 
         self.encoder = Encoder(model_config)
-        self.variance_adaptor = VarianceAdaptor(preprocess_config, model_config)
+
+        self.variance_adaptor = VarianceAdaptor(
+            preprocess_config,
+            model_config
+        )
+
         self.decoder = Decoder(model_config)
         self.mel_linear = nn.Linear(
             model_config["transformer"]["decoder_hidden"],
@@ -51,32 +56,33 @@ class FastSpeech2(nn.Module):
         
     def forward(
         self,
-        speakers,
-        texts,
-        src_lens,
-        max_src_len,
-        mels=None,
-        mel_lens=None,
-        max_mel_len=None,
-        p_targets=None,
-        e_targets=None,
-        d_targets=None,
-        p_control=1.0,
-        e_control=1.0,
-        d_control=1.0,
+        speakers: torch.Tensor,
+        phonems: torch.Tensor,
+        phonems_lens: torch.Tensor,
+        max_phonems_len: int,
+        p_control: float,
+        e_control: float,
+        d_control: float,
+        # mels: Optional[torch.Tensor] = None,
+        # mel_lens: Optional[torch.Tensor] = None,
+        # max_mel_len: Optional[int] = None,
+        # p_targets=None,
+        # e_targets=None,
+        # d_targets=None,
+        
     ):
-        src_masks = get_mask_from_lengths(src_lens, max_src_len)
-        mel_masks = (
-            get_mask_from_lengths(mel_lens, max_mel_len)
-            if mel_lens is not None
-            else None
-        )
+        phonem_masks = get_mask_from_lengths(phonems_lens, max_phonems_len)
+        # mel_masks = (
+        #     get_mask_from_lengths(mel_lens, max_mel_len)
+        #     if mel_lens is not None
+        #     else None
+        # )
 
-        output = self.encoder(texts, src_masks)
+        output = self.encoder(phonems, phonem_masks)
 
         if self.speaker_emb is not None:
             output = output + self.speaker_emb(speakers).unsqueeze(1).expand(
-                -1, max_src_len, -1
+                -1, max_phonems_len, -1
             )
 
         (
@@ -89,12 +95,12 @@ class FastSpeech2(nn.Module):
             mel_masks,
         ) = self.variance_adaptor(
             output,
-            src_masks,
-            mel_masks,
-            max_mel_len,
-            p_targets,
-            e_targets,
-            d_targets,
+            phonem_masks,
+            # mel_masks,
+            # max_mel_len,
+            # p_targets,
+            # e_targets,
+            # d_targets,
             p_control,
             e_control,
             d_control,
@@ -112,11 +118,19 @@ class FastSpeech2(nn.Module):
             e_predictions,
             log_d_predictions,
             d_rounded,
-            src_masks,
+            phonem_masks,
             mel_masks,
-            src_lens,
+            phonems_lens,
             mel_lens,
         )
+
+    @torch.jit.unused
+    def to(
+        self, 
+        device: str
+    ):
+        self.variance_adaptor.length_regulator.device = device
+        return super().to(device)
 
     @classmethod
     def build(

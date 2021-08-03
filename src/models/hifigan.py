@@ -10,12 +10,12 @@ from src.modules.gan import (
     LRELU_SLOPE
 )
 
-class Generator(nn.Module):
+class VocoderGenerator(nn.Module):
     def __init__(
         self, 
         config: dict
     ):
-        super(Generator, self).__init__()
+        super(VocoderGenerator, self).__init__()
         self.config = config
         self.num_kernels = len(config.get("resblock_kernel_sizes"))
         self.num_upsamples = len(config.get("upsample_rates"))

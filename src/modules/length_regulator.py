@@ -1,45 +1,41 @@
-from typing import List, Optional, Union
+from typing import List, Tuple
 import torch
-from torch import nn
-
 
 from src.utils.tools import pad
 
-
-class LengthRegulator(nn.Module):
+class LengthRegulator(torch.nn.Module):
     """ Length Regulator """
 
     def __init__(
         self,
+        device: str
     ):
         super(LengthRegulator, self).__init__()
-        
-    def LR(
+        self.device = device
+
+    def forward(
         self,
-        x: List[List[torch.Tensor]],
-        duration: List[torch.Tensor],
-        max_len: Optional[int],
-        device: Union[torch.device, str]
-    ):
-        output = list()
-        mel_len = list()
+        x: torch.Tensor,
+        duration: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    
+        output = torch.jit.annotate(List[torch.Tensor], [])
+        mel_len = torch.jit.annotate(List[int], [])
+
         for batch, expand_target in zip(x, duration):
             expanded = self.expand(batch, expand_target)
             output.append(expanded)
             mel_len.append(expanded.shape[0])
 
-        if max_len is not None:
-            output = pad(output, max_len)
-        else:
-            output = pad(output)
+        output = pad(output)
 
-        return output, torch.LongTensor(mel_len).to(device)
+        return output, torch.tensor(mel_len).long().to(self.device)
 
     def expand(
         self,
-        batch: List[torch.Tensor],
+        batch: torch.Tensor,
         predicted: torch.Tensor
-    ) -> List[torch.Tensor]:
+    ) -> torch.Tensor:
         out = list()
 
         for i, vec in enumerate(batch):
@@ -48,18 +44,3 @@ class LengthRegulator(nn.Module):
         out = torch.cat(out, 0)
 
         return out
-
-    def forward(
-        self,
-        x,
-        duration,
-        max_len,
-        device    
-    ):
-        output, mel_len = self.LR(
-            x,
-            duration,
-            max_len,
-            device
-        )
-        return output, mel_len

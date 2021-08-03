@@ -1,3 +1,4 @@
+from typing import Optional
 import numpy as np
 import torch
 from torch import nn
@@ -63,21 +64,13 @@ class Encoder(nn.Module):
         # -- Prepare masks
         slf_attn_mask = mask.unsqueeze(1).expand(-1, max_len, -1)
 
-        # -- Forward
-        if not self.training and src_seq.shape[1] > self.max_seq_len:
-            enc_output = self.src_word_emb(src_seq) + get_sinusoid_encoding_table(
-                src_seq.shape[1], self.d_model
-            )[: src_seq.shape[1], :].unsqueeze(0).expand(batch_size, -1, -1).to(
-                src_seq.device
-            )
-        else:
-            enc_output = self.src_word_emb(src_seq) + self.position_enc[
-                :, :max_len, :
-            ].expand(batch_size, -1, -1)
+        enc_output = self.src_word_emb(src_seq) + self.position_enc[:, :max_len, :].expand(batch_size, -1, -1)
 
         for enc_layer in self.layer_stack:
             enc_output, enc_slf_attn = enc_layer(
-                enc_output, mask=mask, slf_attn_mask=slf_attn_mask
+                enc_output, 
+                mask=mask,
+                slf_attn_mask=slf_attn_mask
             )
             
 
