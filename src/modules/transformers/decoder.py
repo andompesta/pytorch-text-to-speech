@@ -14,7 +14,6 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
 
         n_position = config["max_seq_len"] + 1
-        d_word_vec = config["transformer"]["decoder_hidden"]
         n_layers = config["transformer"]["decoder_layer"]
         n_head = config["transformer"]["decoder_head"]
         d_k = d_v = (
@@ -30,7 +29,7 @@ class Decoder(nn.Module):
         self.d_model = d_model
 
         self.position_enc = nn.Parameter(
-            get_sinusoid_encoding_table(n_position, d_word_vec).unsqueeze(0),
+            get_sinusoid_encoding_table(n_position, d_model).unsqueeze(0),
             requires_grad=False,
         )
 
