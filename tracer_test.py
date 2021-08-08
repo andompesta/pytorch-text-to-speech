@@ -1,5 +1,5 @@
 import argparse
-from typing import List, Tuple
+from typing import List
 import re
 import yaml
 import numpy as np
@@ -123,26 +123,23 @@ def preprocess_english(
 
 if __name__ == "__main__":
     args = parse_args()
-    device = "cpu"
-
-    train_config = yaml.load(open(args.train_config, "r"), Loader=yaml.FullLoader)
     preprocess_config = yaml.load(open(args.preprocess_config, "r"), Loader=yaml.FullLoader)
 
-    synthesizer = Synthesizer.build(
-        args.preprocess_config,
-        args.mel_config,
-        args.voc_config,
-        device
-    ).eval()
-
-
     raw_texts = [
-        "lets try to trace this",
-        "maybe will works eventually"
+        # "Learning feature interactions is crucial for click-through rate (CTR) prediction in recommender systems.",
+        # "In most existing deep learning models, feature interactions are either manually designed or simply enumerated.",
+        # "However, enumerating all feature interactions brings large memory and computation cost.",
+        # "Even worse, useless interactions may introduce noise and complicate the training process.",
+        # "In this work, we propose a two-stage algorithm called Automatic Feature Interaction Selection (AutoFIS).",
+        # "AutoFIS can automatically identify important feature interactions for factorization models with computational cost just equivalent to training the target model to convergence.",
+        # "In the search stage, instead of searching over a discrete set of candidate feature interactions, we relax the choices to be continuous by introducing the architecture parameters.",
+        # "By implementing a regularized optimizer over the architecture parameters, the model can automatically identify and remove the redundant feature interactions during the training process of the model.",
+        # "In the re-train stage, we keep the architecture parameters serving as an attention unit to further boost the performance.",
+        # "Offline experiments on three large-scale datasets (two public benchmarks, one private) demonstrate that AutoFIS can significantly improve various FM based models.",
+        "AutoFIS has been deployed onto the training platform of Huawei App Store recommendation service, where a 10-day online A/B test demonstrated that AutoFIS improved the DeepFM model by 20,3 and 20,1 percent in terms of CTR and CVR respectively."
     ]
 
     speakers = np.array([args.speaker_id] * len(raw_texts))
-
     phonems = preprocess_english(
         raw_texts, 
         preprocess_config
@@ -157,59 +154,33 @@ if __name__ == "__main__":
         phonems=phonems,
         phonems_len=phonems_len,
     )
-    
+
     batch = to_device(batch, "cpu")
 
-    example_inputs = (
-        batch.speakers,
-        batch.phonems,
-        batch.phonems_len,
-        1.0,
-        1.0,
-        1.0
+    example_inputs = dict(
+        speakers=batch.speakers,
+        phonems=batch.phonems,
+        phonems_len=batch.phonems_len,
+        pitch_control=1.0,
+        energy_control=1.0,
+        duration_control=1.0
     )
 
-    # control input
-    control_raw_texts = [
-        "lets try to trace this out",
-    ]
+    jit_module = torch.jit.load('traced.pt')
+    wavs, lengths = jit_module(**example_inputs)
 
-    control_speakers = np.array([args.speaker_id] * len(control_raw_texts))
 
-    control_phonems = preprocess_english(
-        control_raw_texts, 
-        preprocess_config
-    )
-        
-    control_phonems_len = np.array([len(p) for p in control_phonems])
-    control_phonems = pad_1D(control_phonems)
-    control_batch = Batch(
-        doc_id="tracing",
-        texts=control_raw_texts, 
-        speakers=control_speakers,
-        phonems=control_phonems,
-        phonems_len=control_phonems_len,
-    )
+    gens = []
+    for i, (wav, len) in enumerate(zip(wavs, lengths)):
+        wav = wav[: len]
+        gens.append(wav)
     
-    
-    control_values = args.pitch_control, args.energy_control, args.duration_control
 
-    control_batch = to_device(control_batch, device)
-
-    control_example_inputs = (
-        control_batch.speakers,
-        control_batch.phonems,
-        control_batch.phonems_len,
-        1.0,
-        1.0,
-        1.0
+    sampling_rate = preprocess_config["preprocessing"]["audio"]["sampling_rate"]
+    wavfile.write(
+        "{}.wav".format(batch.doc_id), 
+        sampling_rate,
+        np.concatenate(gens)
     )
-    
-    jit_module = torch.jit.script(synthesizer)
 
-    print(jit_module.graph)
-
-    jit_module(*example_inputs)
-    jit_module(*control_example_inputs)
-
-    jit_module.save("traced.pt")
+    print("done")

@@ -117,56 +117,38 @@ class VarianceAdaptor(nn.Module):
         self,
         x: torch.Tensor,
         src_mask: torch.Tensor,
-        p_control: float = 1.0,
-        e_control: float = 1.0,
-        d_control: float = 1.0,
+        pitch_control: float,
+        energy_control: float,
+        duration_control: float
     ):
 
         log_duration_prediction = self.duration_predictor(x, src_mask)
-        # if self.pitch_feature_level == "phoneme_level":
         pitch_prediction, pitch_embedding = self.get_pitch_embedding(
             x, 
             None,
             src_mask,
-            p_control
+            pitch_control
         )
         x = x + pitch_embedding
 
-        # if self.energy_feature_level == "phoneme_level":
         energy_prediction, energy_embedding = self.get_energy_embedding(
             x,
             None,
             src_mask,
-            e_control
+            energy_control
         )
         x = x + energy_embedding
 
         duration_rounded = torch.clamp(
-            (torch.round(torch.exp(log_duration_prediction) - 1) * d_control),
+            (torch.round(torch.exp(log_duration_prediction) - 1) * duration_control),
             min=0,
         )
         x, mel_len = self.length_regulator(
             x,
             duration_rounded,
         )
-        mel_mask = get_mask_from_lengths(mel_len)
-
-        # if self.pitch_feature_level == "frame_level":
-        #     pitch_prediction, pitch_embedding = self.get_pitch_embedding(
-        #         x, 
-        #         None,
-        #         mel_mask,
-        #         p_control
-        #     )
-        #     x = x + pitch_embedding
-        # if self.energy_feature_level == "frame_level":
-        #     energy_prediction, energy_embedding = self.get_energy_embedding(
-        #         x,
-        #         None,
-        #         mel_mask,
-        #         e_control
-        #     )
-        #     x = x + energy_embedding
+        max_mel_len = mel_len.max().item()
+        mel_mask = get_mask_from_lengths(mel_len, max_mel_len)
 
         return (
             x,

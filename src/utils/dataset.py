@@ -11,7 +11,7 @@ from src.utils.tools import pad_1D, pad_2D
 from collections import namedtuple
 
 
-Batch = namedtuple("Batch", ["doc_id", "texts", "speakers", "phonems", "phonems_len", "max_phonems_len"])
+Batch = namedtuple("Batch", ["doc_id", "texts", "speakers", "phonems", "phonems_len"])
 
 def to_device(
     batch: Union[tuple, Batch], 
@@ -67,8 +67,7 @@ def to_device(
             batch.texts,
             speakers=speakers,
             phonems=phonems,
-            phonems_len=phonem_lens,
-            max_phonems_len=batch.max_phonems_len
+            phonems_len=phonem_lens
         )
 
 

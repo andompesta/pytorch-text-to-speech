@@ -40,6 +40,7 @@ class FastSpeech2(nn.Module):
         )
         self.postnet = PostNet()
 
+        
         self.speaker_emb = None
         if model_config["multi_speaker"]:
             with open(
@@ -59,10 +60,9 @@ class FastSpeech2(nn.Module):
         speakers: torch.Tensor,
         phonems: torch.Tensor,
         phonems_lens: torch.Tensor,
-        max_phonems_len: int,
-        p_control: float,
-        e_control: float,
-        d_control: float,
+        pitch_control: float,
+        energy_control: float,
+        duration_control: float
         # mels: Optional[torch.Tensor] = None,
         # mel_lens: Optional[torch.Tensor] = None,
         # max_mel_len: Optional[int] = None,
@@ -71,12 +71,8 @@ class FastSpeech2(nn.Module):
         # d_targets=None,
         
     ):
+        max_phonems_len = phonems_lens.max().item()
         phonem_masks = get_mask_from_lengths(phonems_lens, max_phonems_len)
-        # mel_masks = (
-        #     get_mask_from_lengths(mel_lens, max_mel_len)
-        #     if mel_lens is not None
-        #     else None
-        # )
 
         output = self.encoder(phonems, phonem_masks)
 
@@ -96,14 +92,17 @@ class FastSpeech2(nn.Module):
         ) = self.variance_adaptor(
             output,
             phonem_masks,
+            pitch_control=pitch_control,
+            energy_control=energy_control,
+            duration_control=duration_control
             # mel_masks,
             # max_mel_len,
             # p_targets,
             # e_targets,
             # d_targets,
-            p_control,
-            e_control,
-            d_control,
+            # p_control,
+            # e_control,
+            # d_control,
         )
 
         output, mel_masks = self.decoder(output, mel_masks)

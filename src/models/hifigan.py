@@ -1,13 +1,14 @@
+from collections import OrderedDict
 import torch
+import os
 from torch import nn
 from torch.nn import functional as F
-from torch.nn import Conv1d, ConvTranspose1d
+from torch.nn import Conv1d
 from torch.nn.utils import weight_norm, remove_weight_norm
 
 from src.modules.gan import (
-    ResBlock,
+    UpSampler,
     init_weights,
-    LRELU_SLOPE
 )
 
 class VocoderGenerator(nn.Module):
@@ -22,66 +23,53 @@ class VocoderGenerator(nn.Module):
         self.conv_pre = weight_norm(
             Conv1d(80, config.get("upsample_initial_channel"), 7, 1, padding=3)
         )
-        resblock = ResBlock
+        self.conv_pre.apply(init_weights)
 
-        self.ups = nn.ModuleList()
+        self.upsampler = nn.ModuleList()
         for i, (u, k) in enumerate(
             zip(
                 config.get("upsample_rates"),
                 config.get("upsample_kernel_sizes")
             )
         ):
-            self.ups.append(
-                weight_norm(
-                    ConvTranspose1d(
-                        config.get("upsample_initial_channel") // (2 ** i),
-                        config.get("upsample_initial_channel") // (2 ** (i + 1)),
-                        k,
-                        u,
-                        padding=(k - u) // 2,
-                    )
+            ch_in = config.get("upsample_initial_channel") // (2 ** i)
+            ch_out = config.get("upsample_initial_channel") // (2 ** (i + 1))
+            self.upsampler.append(
+                UpSampler(
+                    upsample_in_channel=ch_in,
+                    upsample_out_channel=ch_out,
+                    upsample_kernel_size=k,
+                    upsample_rates=u,
+                    resblock_kernel_sizes=config.get("resblock_kernel_sizes"),
+                    resblock_dilation_sizes=config.get("resblock_dilation_sizes")
                 )
             )
-
-        self.resblocks = nn.ModuleList()
-        for i in range(len(self.ups)):
-            ch = config.get("upsample_initial_channel") // (2 ** (i + 1))
-            for j, (k, d) in enumerate(
-                zip(
-                    config.get("resblock_kernel_sizes"),
-                    config.get("resblock_dilation_sizes")
-                )
-            ):
-                self.resblocks.append(resblock(config, ch, k, d))
-
-        self.conv_post = weight_norm(Conv1d(ch, 1, 7, 1, padding=3))
-        self.ups.apply(init_weights)
+        
+        self.conv_post = weight_norm(Conv1d(ch_out, 1, 7, 1, padding=3))
         self.conv_post.apply(init_weights)
 
     def forward(self, x):
         x = self.conv_pre(x)
-        for i in range(self.num_upsamples):
-            x = F.leaky_relu(x, LRELU_SLOPE)
-            x = self.ups[i](x)
-            xs = None
-            for j in range(self.num_kernels):
-                if xs is None:
-                    xs = self.resblocks[i * self.num_kernels + j](x)
-                else:
-                    xs += self.resblocks[i * self.num_kernels + j](x)
-            x = xs / self.num_kernels
+        
+        # for i in range(self.num_upsamples):
+        #     x = getattr(self, f"upsampler_{i}")(x)
+
+        for i, ups in enumerate(self.upsampler):
+            x = ups(x)
+
         x = F.leaky_relu(x)
         x = self.conv_post(x)
         x = F.tanh(x)
 
         return x
 
-    def remove_weight_norm(self):
+    @torch.jit.ignore
+    def remove_wn(self):
         print("Removing weight norm...")
-        for l in self.ups:
-            remove_weight_norm(l)
-        for l in self.resblocks:
-            l.remove_weight_norm()
+        
+        for ups in self.upsampler:
+            ups.remove_wn()
+            
         remove_weight_norm(self.conv_pre)
         remove_weight_norm(self.conv_post)
     
@@ -95,7 +83,7 @@ class VocoderGenerator(nn.Module):
         vocoder = cls(config)
         if speaker == "LJSpeech":
             ckpt = torch.load(
-                "./output/hifigan/generator_LJSpeech.pth.tar", 
+                "./output/hifigan/generator_mapped_LJSpeech.pth.tar", 
                 map_location="cpu"
             )
 
@@ -107,7 +95,42 @@ class VocoderGenerator(nn.Module):
         else:
             raise NotImplementedError(f"speaker {speaker} not implemented")
         
-        vocoder.load_state_dict(ckpt["generator"])
+        vocoder.load_state_dict(ckpt)
         vocoder.eval()
-        vocoder.remove_weight_norm()
+        vocoder.remove_wn()
         return vocoder.to(device)
+
+
+if __name__ == "__main__":
+    import yaml
+
+    ckpt = torch.load(
+        "./output/hifigan/generator_LJSpeech.pth.tar", 
+        map_location="cpu"
+    )
+
+
+    vocoder_config = yaml.load(open("config/hifigan/model.yaml", "r"), Loader=yaml.FullLoader)
+    vocoder = VocoderGenerator(
+        vocoder_config
+    )
+    weights = list(vocoder.named_parameters())
+
+    mapped_ckpt = OrderedDict()
+
+    for name, p in ckpt["generator"].items():
+        
+        if name.startswith("ups"):
+            _, level, weight = name.split(".")
+            mapped_ckpt[f"upsampler.{level}.up.{weight}"] = p
+        elif name.startswith("resblocks"):
+            _, level, module, module_level, weight = name.split(".")
+            res_level = int(level) % 3
+            level = int(level) // 3
+            mapped_ckpt[f"upsampler.{level}.res_{res_level}.{module}.{module_level}.{weight}"] = p
+        else:
+            mapped_ckpt[name] = p
+
+    vocoder.load_state_dict(mapped_ckpt)
+
+    torch.save(vocoder.state_dict(), "./output/hifigan/generator_mapped_LJSpeech.pth.tar")

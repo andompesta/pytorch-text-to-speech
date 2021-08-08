@@ -37,7 +37,6 @@ class Synthesizer(torch.nn.Module):
         speakers: torch.Tensor,
         phonems: torch.Tensor,
         phonems_len: torch.Tensor,
-        max_phonems_len: int,
         pitch_control: float,
         energy_control: float,
         duration_control: float
@@ -47,10 +46,9 @@ class Synthesizer(torch.nn.Module):
             speakers,
             phonems,
             phonems_len,
-            max_phonems_len,
-            p_control=pitch_control,
-            e_control=energy_control,
-            d_control=duration_control
+            pitch_control=pitch_control,
+            energy_control=energy_control,
+            duration_control=duration_control
         )
             
         # generate wave
