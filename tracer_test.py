@@ -15,7 +15,6 @@ from src.models import Synthesizer, synthesizer
 from src.utils import (
     to_device,
     Batch,
-    vocoder_infer,
     pad_1D
 )
 from src.text import text_to_sequence
@@ -126,16 +125,16 @@ if __name__ == "__main__":
     preprocess_config = yaml.load(open(args.preprocess_config, "r"), Loader=yaml.FullLoader)
 
     raw_texts = [
-        # "Learning feature interactions is crucial for click-through rate (CTR) prediction in recommender systems.",
-        # "In most existing deep learning models, feature interactions are either manually designed or simply enumerated.",
-        # "However, enumerating all feature interactions brings large memory and computation cost.",
-        # "Even worse, useless interactions may introduce noise and complicate the training process.",
-        # "In this work, we propose a two-stage algorithm called Automatic Feature Interaction Selection (AutoFIS).",
-        # "AutoFIS can automatically identify important feature interactions for factorization models with computational cost just equivalent to training the target model to convergence.",
-        # "In the search stage, instead of searching over a discrete set of candidate feature interactions, we relax the choices to be continuous by introducing the architecture parameters.",
-        # "By implementing a regularized optimizer over the architecture parameters, the model can automatically identify and remove the redundant feature interactions during the training process of the model.",
-        # "In the re-train stage, we keep the architecture parameters serving as an attention unit to further boost the performance.",
-        # "Offline experiments on three large-scale datasets (two public benchmarks, one private) demonstrate that AutoFIS can significantly improve various FM based models.",
+        "Learning feature interactions is crucial for click-through rate (CTR) prediction in recommender systems.",
+        "In most existing deep learning models, feature interactions are either manually designed or simply enumerated.",
+        "However, enumerating all feature interactions brings large memory and computation cost.",
+        "Even worse, useless interactions may introduce noise and complicate the training process.",
+        "In this work, we propose a two-stage algorithm called Automatic Feature Interaction Selection (AutoFIS).",
+        "AutoFIS can automatically identify important feature interactions for factorization models with computational cost just equivalent to training the target model to convergence.",
+        "In the search stage, instead of searching over a discrete set of candidate feature interactions, we relax the choices to be continuous by introducing the architecture parameters.",
+        "By implementing a regularized optimizer over the architecture parameters, the model can automatically identify and remove the redundant feature interactions during the training process of the model.",
+        "In the re-train stage, we keep the architecture parameters serving as an attention unit to further boost the performance.",
+        "Offline experiments on three large-scale datasets (two public benchmarks, one private) demonstrate that AutoFIS can significantly improve various FM based models.",
         "AutoFIS has been deployed onto the training platform of Huawei App Store recommendation service, where a 10-day online A/B test demonstrated that AutoFIS improved the DeepFM model by 20,3 and 20,1 percent in terms of CTR and CVR respectively."
     ]
 
@@ -167,7 +166,8 @@ if __name__ == "__main__":
     )
 
     jit_module = torch.jit.load('traced.pt')
-    wavs, lengths = jit_module(**example_inputs)
+    with torch.no_grad():
+        wavs, lengths = jit_module(**example_inputs)
 
 
     gens = []

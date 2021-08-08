@@ -165,6 +165,8 @@ def fast_speech_weight_mapping(
         if "conv." in name:
             tokens = name.split("conv.")
             ckpt_model[tokens[0] + tokens[1]] = param
+        elif "position_enc" in name:
+            pass
         else:
             ckpt_model[name] = param
     return ckpt_model

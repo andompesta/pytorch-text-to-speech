@@ -11,7 +11,7 @@ from pypinyin import pinyin, Style
 from scipy.io import wavfile
 
 
-from src.models import FastSpeech2, VocoderGenerator
+from src.models import FastSpeech2, VocoderGenerator, Synthesizer
 from src.utils import (
     to_device,
     Batch,
@@ -32,22 +32,25 @@ def parse_args() -> argparse.Namespace:
         "-p",
         "--preprocess_config",
         type=str,
-        required=True,
-        help="path to preprocess.yaml",
+        default="config/LJSpeech/preprocess.yaml"
     )
     parser.add_argument(
         "-m", 
-        "--model_config", 
+        "--mel_config", 
         type=str, 
-        required=True, 
-        help="path to model.yaml"
+        default="config/LJSpeech/model.yaml" 
+    )
+    parser.add_argument(
+        "-v", 
+        "--voc_config", 
+        type=str, 
+        default="config/hifigan/model.yaml"
     )
     parser.add_argument(
         "-t",
         "--train_config",
         type=str,
-        required=True,
-        help="path to train.yaml"
+        default="config/LJSpeech/train.yaml"
     )
 
     parser.add_argument(
@@ -136,7 +139,6 @@ def synthesize(
                 batch.speakers,
                 batch.phonems,
                 batch.phonems_len,
-                batch.max_phonems_len,
                 p_control=pitch_control,
                 e_control=energy_control,
                 d_control=duration_control
@@ -167,28 +169,16 @@ def synthesize(
 if __name__ == "__main__":
     args = parse_args()
     device = "cpu"
-    preprocess_config = yaml.load(open(args.preprocess_config, "r"), Loader=yaml.FullLoader)
-    model_config = yaml.load(open(args.model_config, "r"), Loader=yaml.FullLoader)
+
     train_config = yaml.load(open(args.train_config, "r"), Loader=yaml.FullLoader)
-    
-    model = FastSpeech2.build(
-        preprocess_config,
-        model_config,
-        device=device
-    )
+    preprocess_config = yaml.load(open(args.preprocess_config, "r"), Loader=yaml.FullLoader)
 
-    name = model_config["vocoder"]["model"]
-    speaker = model_config["vocoder"]["speaker"]
-
-    if name == "HiFi-GAN":
-        vocoder_config = yaml.load(open("config/hifigan/model.yaml", "r"), Loader=yaml.FullLoader)
-        vocoder = VocoderGenerator.build(
-            vocoder_config,
-            speaker=speaker,
-            device=device
-        )
-    else:
-        raise NotImplementedError(name)
+    synthesizer = Synthesizer.build(
+        args.preprocess_config,
+        args.mel_config,
+        args.voc_config,
+        device
+    ).eval()
     
     raw_texts = [
         "Learning feature interactions is crucial for click-through rate (CTR) prediction in recommender systems.",
@@ -201,7 +191,7 @@ if __name__ == "__main__":
         "By implementing a regularized optimizer over the architecture parameters, the model can automatically identify and remove the redundant feature interactions during the training process of the model.",
         "In the re-train stage, we keep the architecture parameters serving as an attention unit to further boost the performance.",
         "Offline experiments on three large-scale datasets (two public benchmarks, one private) demonstrate that AutoFIS can significantly improve various FM based models.",
-        "AutoFIS has been deployed onto the training platform of Huawei App Store recommendation service, where a 10-day online A/B test demonstrated that AutoFIS improved the DeepFM model by 20.3 and 20.1 percent in terms of CTR and CVR respectively."
+        "AutoFIS has been deployed onto the training platform of Huawei App Store recommendation service, where a 10-day online A/B test demonstrated that AutoFIS improved the DeepFM model by 20.3% and 20.1% in terms of CTR and CVR respectively."
     ]
 
     speakers = np.array([args.speaker_id] * len(raw_texts))
@@ -217,25 +207,41 @@ if __name__ == "__main__":
     
     phonems_len = np.array([len(p) for p in phonems])
     phonems = pad_1D(phonems)
-    batchs = [Batch(
+    batch = Batch(
         doc_id="paper-4",
         texts=raw_texts, 
         speakers=speakers,
         phonems=phonems,
         phonems_len=phonems_len,
-        max_phonems_len=max(phonems_len)
-    )]
-    
-    
-    control_values = args.pitch_control, args.energy_control, args.duration_control
-    configs = (preprocess_config, model_config, train_config)
-
-    synthesize(
-        model,
-        configs,
-        vocoder,
-        batchs,
-        control_values,
-        device,
-        "./output/result/LJSpeech"
     )
+    
+    
+    batch = to_device(batch, "cpu")
+
+    example_inputs = (
+        batch.speakers,
+        batch.phonems,
+        batch.phonems_len,
+        1.0,
+        1.0,
+        1.0
+    )
+
+    with torch.no_grad():
+        wavs, lengths = synthesizer(*example_inputs)
+
+
+    gens = []
+    for i, (wav, len) in enumerate(zip(wavs, lengths)):
+        wav = wav[: len]
+        gens.append(wav)
+    
+
+    sampling_rate = preprocess_config["preprocessing"]["audio"]["sampling_rate"]
+    wavfile.write(
+        "output/result/LJSpeech/{}.wav".format(batch.doc_id), 
+        sampling_rate,
+        np.concatenate(gens)
+    )
+
+    print("done")

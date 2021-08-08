@@ -27,7 +27,7 @@ class Synthesizer(torch.nn.Module):
             device=device
         )
 
-        self.vocoder_generaotr = VocoderGenerator.build(
+        self.vocoder_generator = VocoderGenerator.build(
             voice_generator_config,
             device=device
         )
@@ -55,7 +55,7 @@ class Synthesizer(torch.nn.Module):
         mel_predictions = output[1].transpose(1, 2)
         lengths = output[9] * self.hop_length
 
-        wavs = self.vocoder_generaotr(mel_predictions).squeeze(1)
+        wavs = self.vocoder_generator(mel_predictions).squeeze(1)
 
         wavs = (
             wavs.detach().cpu() * self.max_wav_value

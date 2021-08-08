@@ -24,8 +24,7 @@ class FastSpeech2(nn.Module):
         model_config: dict,
     ):
         super(FastSpeech2, self).__init__()
-        self.model_config = model_config
-
+        self.model_config = model_config        
         self.encoder = Encoder(model_config)
 
         self.variance_adaptor = VarianceAdaptor(
@@ -63,13 +62,6 @@ class FastSpeech2(nn.Module):
         pitch_control: float,
         energy_control: float,
         duration_control: float
-        # mels: Optional[torch.Tensor] = None,
-        # mel_lens: Optional[torch.Tensor] = None,
-        # max_mel_len: Optional[int] = None,
-        # p_targets=None,
-        # e_targets=None,
-        # d_targets=None,
-        
     ):
         max_phonems_len = phonems_lens.max().item()
         phonem_masks = get_mask_from_lengths(phonems_lens, max_phonems_len)
@@ -95,14 +87,6 @@ class FastSpeech2(nn.Module):
             pitch_control=pitch_control,
             energy_control=energy_control,
             duration_control=duration_control
-            # mel_masks,
-            # max_mel_len,
-            # p_targets,
-            # e_targets,
-            # d_targets,
-            # p_control,
-            # e_control,
-            # d_control,
         )
 
         output, mel_masks = self.decoder(output, mel_masks)
@@ -154,9 +138,11 @@ class FastSpeech2(nn.Module):
             )
             ckpt = torch.load(ckpt_path, map_location="cpu")
             state_dict = ckpt.get("model")
+            strinct = True
             if mapping_fn is not None:
                 state_dict = mapping_fn(state_dict)
-            model.load_state_dict(state_dict)
+                strict = False
+            model.load_state_dict(state_dict, strict=strict)
 
         model = model.to(device)
 

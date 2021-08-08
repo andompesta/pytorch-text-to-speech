@@ -15,7 +15,6 @@ class Encoder(nn.Module):
 
         n_position = config["max_seq_len"] + 1
         n_src_vocab = len(symbols) + 1
-        d_word_vec = config["transformer"]["encoder_hidden"]
         n_layers = config["transformer"]["encoder_layer"]
         n_head = config["transformer"]["encoder_head"]
         d_k = d_v = (
@@ -31,10 +30,10 @@ class Encoder(nn.Module):
         self.d_model = d_model
 
         self.src_word_emb = nn.Embedding(
-            n_src_vocab, d_word_vec, padding_idx=PAD
+            n_src_vocab, d_model, padding_idx=PAD
         )
         self.position_enc = nn.Parameter(
-            get_sinusoid_encoding_table(n_position, d_word_vec).unsqueeze(0),
+            get_sinusoid_encoding_table(n_position, d_model).unsqueeze(0),
             requires_grad=False,
         )
 

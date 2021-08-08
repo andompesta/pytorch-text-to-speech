@@ -50,9 +50,6 @@ class VocoderGenerator(nn.Module):
 
     def forward(self, x):
         x = self.conv_pre(x)
-        
-        # for i in range(self.num_upsamples):
-        #     x = getattr(self, f"upsampler_{i}")(x)
 
         for i, ups in enumerate(self.upsampler):
             x = ups(x)

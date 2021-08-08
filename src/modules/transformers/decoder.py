@@ -14,7 +14,6 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
 
         n_position = config["max_seq_len"] + 1
-        d_word_vec = config["transformer"]["decoder_hidden"]
         n_layers = config["transformer"]["decoder_layer"]
         n_head = config["transformer"]["decoder_head"]
         d_k = d_v = (
@@ -30,7 +29,7 @@ class Decoder(nn.Module):
         self.d_model = d_model
 
         self.position_enc = nn.Parameter(
-            get_sinusoid_encoding_table(n_position, d_word_vec).unsqueeze(0),
+            get_sinusoid_encoding_table(n_position, d_model).unsqueeze(0),
             requires_grad=False,
         )
 
@@ -56,16 +55,13 @@ class Decoder(nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
 
         batch_size, max_len = enc_seq.shape[0], enc_seq.shape[1]
-
         max_len = min(max_len, self.max_seq_len)
 
-        # -- Prepare masks
+        # # -- Prepare masks
         slf_attn_mask = mask.unsqueeze(1).expand(-1, max_len, -1)
         dec_output = enc_seq[:, :max_len, :] + self.position_enc[
             :, :max_len, :
         ].expand(batch_size, -1, -1)
-        mask = mask[:, :max_len]
-        slf_attn_mask = slf_attn_mask[:, :, :max_len]
 
         for dec_layer in self.layer_stack:
             dec_output, dec_slf_attn = dec_layer(
