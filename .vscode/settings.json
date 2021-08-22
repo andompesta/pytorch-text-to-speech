@@ -1,5 +1,4 @@
 {
-    "python.pythonPath": "/home/ando/miniconda3/envs/omnispeech/bin/python",
     "debug.console.fontFamily": "Cascadia Code Light",
     "debug.console.lineHeight": 21,
     "debug.console.fontSize": 15,
