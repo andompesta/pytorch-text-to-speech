@@ -1,3 +1,4 @@
+from typing import Optional
 import numpy as np
 import torch
 from torch import nn
@@ -14,7 +15,6 @@ class Encoder(nn.Module):
 
         n_position = config["max_seq_len"] + 1
         n_src_vocab = len(symbols) + 1
-        d_word_vec = config["transformer"]["encoder_hidden"]
         n_layers = config["transformer"]["encoder_layer"]
         n_head = config["transformer"]["encoder_head"]
         d_k = d_v = (
@@ -30,10 +30,10 @@ class Encoder(nn.Module):
         self.d_model = d_model
 
         self.src_word_emb = nn.Embedding(
-            n_src_vocab, d_word_vec, padding_idx=PAD
+            n_src_vocab, d_model, padding_idx=PAD
         )
         self.position_enc = nn.Parameter(
-            get_sinusoid_encoding_table(n_position, d_word_vec).unsqueeze(0),
+            get_sinusoid_encoding_table(n_position, d_model).unsqueeze(0),
             requires_grad=False,
         )
 
@@ -63,21 +63,13 @@ class Encoder(nn.Module):
         # -- Prepare masks
         slf_attn_mask = mask.unsqueeze(1).expand(-1, max_len, -1)
 
-        # -- Forward
-        if not self.training and src_seq.shape[1] > self.max_seq_len:
-            enc_output = self.src_word_emb(src_seq) + get_sinusoid_encoding_table(
-                src_seq.shape[1], self.d_model
-            )[: src_seq.shape[1], :].unsqueeze(0).expand(batch_size, -1, -1).to(
-                src_seq.device
-            )
-        else:
-            enc_output = self.src_word_emb(src_seq) + self.position_enc[
-                :, :max_len, :
-            ].expand(batch_size, -1, -1)
+        enc_output = self.src_word_emb(src_seq) + self.position_enc[:, :max_len, :].expand(batch_size, -1, -1)
 
         for enc_layer in self.layer_stack:
             enc_output, enc_slf_attn = enc_layer(
-                enc_output, mask=mask, slf_attn_mask=slf_attn_mask
+                enc_output, 
+                mask=mask,
+                slf_attn_mask=slf_attn_mask
             )
             
 

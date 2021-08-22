@@ -1,4 +1,5 @@
 from torch import nn
+import torch
 import numpy as np
 from .scaled_dot_produt import ScaledDotProductAttention
 
@@ -30,7 +31,13 @@ class MultiHeadAttention(nn.Module):
 
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, q, k, v, mask=None):
+    def forward(
+        self,
+        q: torch.Tensor, 
+        k: torch.Tensor,
+        v: torch.Tensor,
+        mask: torch.Tensor
+    ):
 
         d_k, d_v, n_head = self.d_k, self.d_v, self.n_head
 

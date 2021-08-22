@@ -31,6 +31,8 @@ class PostNet(nn.Module):
                     w_init_gain="tanh",
                 ),
                 nn.BatchNorm1d(postnet_embedding_dim),
+                nn.Tanh(),
+                nn.Dropout()
             )
         )
 
@@ -47,6 +49,8 @@ class PostNet(nn.Module):
                         w_init_gain="tanh",
                     ),
                     nn.BatchNorm1d(postnet_embedding_dim),
+                    nn.Tanh(),
+                    nn.Dropout()
                 )
             )
 
@@ -62,6 +66,7 @@ class PostNet(nn.Module):
                     w_init_gain="linear",
                 ),
                 nn.BatchNorm1d(n_mel_channels),
+                nn.Dropout()
             )
         )
 
@@ -71,9 +76,8 @@ class PostNet(nn.Module):
     ) -> torch.Tensor:
         x = x.contiguous().transpose(1, 2)
 
-        for i in range(len(self.convolutions) - 1):
-            x = F.dropout(torch.tanh(self.convolutions[i](x)), 0.5, self.training)
-        x = F.dropout(self.convolutions[-1](x), 0.5, self.training)
+        for conv in self.convolutions:
+            x = conv(x)
 
         x = x.contiguous().transpose(1, 2)
         return x

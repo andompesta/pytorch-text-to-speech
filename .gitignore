@@ -1,6 +1,8 @@
 .vscode
 .env
 output/
+traced.pt
+*.wav
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

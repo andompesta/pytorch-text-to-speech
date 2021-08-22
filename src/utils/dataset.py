@@ -1,12 +1,74 @@
 import json
-import math
+import torch
 import os
+from typing import Union
 
 import numpy as np
 from torch.utils.data import Dataset
 
 from src.text import text_to_sequence
 from src.utils.tools import pad_1D, pad_2D
+from collections import namedtuple
+
+
+Batch = namedtuple("Batch", ["doc_id", "texts", "speakers", "phonems", "phonems_len"])
+
+def to_device(
+    batch: Union[tuple, Batch], 
+    device: str
+):
+    if len(batch) == 12:
+        (
+            ids,
+            raw_texts,
+            speakers,
+            texts,
+            src_lens,
+            max_src_len,
+            mels,
+            mel_lens,
+            max_mel_len,
+            pitches,
+            energies,
+            durations,
+        ) = batch
+
+        speakers = torch.from_numpy(speakers).long().to(device)
+        texts = torch.from_numpy(texts).long().to(device)
+        src_lens = torch.from_numpy(src_lens).to(device)
+        mels = torch.from_numpy(mels).float().to(device)
+        mel_lens = torch.from_numpy(mel_lens).to(device)
+        pitches = torch.from_numpy(pitches).float().to(device)
+        energies = torch.from_numpy(energies).to(device)
+        durations = torch.from_numpy(durations).long().to(device)
+
+        return (
+            ids,
+            raw_texts,
+            speakers,
+            texts,
+            src_lens,
+            max_src_len,
+            mels,
+            mel_lens,
+            max_mel_len,
+            pitches,
+            energies,
+            durations,
+        )
+
+    elif isinstance(batch, Batch):
+        speakers = torch.from_numpy(batch.speakers).long().to(device)
+        phonems = torch.from_numpy(batch.phonems).long().to(device)
+        phonem_lens = torch.from_numpy(batch.phonems_len).to(device)
+
+        return Batch(
+            batch.doc_id,
+            batch.texts,
+            speakers=speakers,
+            phonems=phonems,
+            phonems_len=phonem_lens
+        )
 
 
 class Dataset(Dataset):

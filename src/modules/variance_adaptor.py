@@ -18,10 +18,11 @@ class VarianceAdaptor(nn.Module):
         self,
         preprocess_config: dict,
         model_config: dict,
+        device: str = "cpu"
     ):
         super(VarianceAdaptor, self).__init__()
         self.duration_predictor = VariancePredictor(model_config)
-        self.length_regulator = LengthRegulator()
+        self.length_regulator = LengthRegulator(device)
         self.pitch_predictor = VariancePredictor(model_config)
         self.energy_predictor = VariancePredictor(model_config)
 
@@ -114,74 +115,40 @@ class VarianceAdaptor(nn.Module):
 
     def forward(
         self,
-        x,
-        src_mask,
-        mel_mask=None,
-        max_len=None,
-        pitch_target=None,
-        energy_target=None,
-        duration_target=None,
-        p_control=1.0,
-        e_control=1.0,
-        d_control=1.0,
+        x: torch.Tensor,
+        src_mask: torch.Tensor,
+        pitch_control: float,
+        energy_control: float,
+        duration_control: float
     ):
-        device = next(self.parameters()).device
 
         log_duration_prediction = self.duration_predictor(x, src_mask)
-        if self.pitch_feature_level == "phoneme_level":
-            pitch_prediction, pitch_embedding = self.get_pitch_embedding(
-                x, 
-                pitch_target,
-                src_mask,
-                p_control
-            )
-            x = x + pitch_embedding
-        if self.energy_feature_level == "phoneme_level":
-            energy_prediction, energy_embedding = self.get_energy_embedding(
-                x,
-                energy_target,
-                src_mask,
-                e_control
-            )
-            x = x + energy_embedding
+        pitch_prediction, pitch_embedding = self.get_pitch_embedding(
+            x, 
+            None,
+            src_mask,
+            pitch_control
+        )
+        x = x + pitch_embedding
 
-        if duration_target is not None:
-            x, mel_len = self.length_regulator(
-                x,
-                duration_target,
-                max_len,
-                device
-            )
-            duration_rounded = duration_target
-        else:
-            duration_rounded = torch.clamp(
-                (torch.round(torch.exp(log_duration_prediction) - 1) * d_control),
-                min=0,
-            )
-            x, mel_len = self.length_regulator(
-                x,
-                duration_rounded,
-                max_len,
-                device
-            )
-            mel_mask = get_mask_from_lengths(mel_len)
+        energy_prediction, energy_embedding = self.get_energy_embedding(
+            x,
+            None,
+            src_mask,
+            energy_control
+        )
+        x = x + energy_embedding
 
-        if self.pitch_feature_level == "frame_level":
-            pitch_prediction, pitch_embedding = self.get_pitch_embedding(
-                x, 
-                pitch_target,
-                mel_mask,
-                p_control
-            )
-            x = x + pitch_embedding
-        if self.energy_feature_level == "frame_level":
-            energy_prediction, energy_embedding = self.get_energy_embedding(
-                x,
-                energy_target,
-                mel_mask,
-                e_control
-            )
-            x = x + energy_embedding
+        duration_rounded = torch.clamp(
+            (torch.round(torch.exp(log_duration_prediction) - 1) * duration_control),
+            min=0,
+        )
+        x, mel_len = self.length_regulator(
+            x,
+            duration_rounded,
+        )
+        max_mel_len = mel_len.max().item()
+        mel_mask = get_mask_from_lengths(mel_len, max_mel_len)
 
         return (
             x,

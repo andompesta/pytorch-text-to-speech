@@ -1,17 +1,20 @@
 import argparse
-from src.utils.tools import pad_1D
-from typing import List, Tuple
+from typing import List
 import re
 import yaml
 import numpy as np
 import torch
+import os
 from string import punctuation
 from g2p_en import G2p
-from pypinyin import pinyin, Style
+from scipy.io import wavfile
 
 
-from src.models import FastSpeech2, Generator
-from src.utils import synth_samples, to_device
+from src.utils import (
+    to_device,
+    Batch,
+    pad_1D
+)
 from src.text import text_to_sequence
 
 def parse_args() -> argparse.Namespace:
@@ -26,22 +29,25 @@ def parse_args() -> argparse.Namespace:
         "-p",
         "--preprocess_config",
         type=str,
-        required=True,
-        help="path to preprocess.yaml",
+        default="config/LJSpeech/preprocess.yaml"
     )
     parser.add_argument(
         "-m", 
-        "--model_config", 
+        "--mel_config", 
         type=str, 
-        required=True, 
-        help="path to model.yaml"
+        default="config/LJSpeech/model.yaml" 
+    )
+    parser.add_argument(
+        "-v", 
+        "--voc_config", 
+        type=str, 
+        default="config/hifigan/model.yaml"
     )
     parser.add_argument(
         "-t",
         "--train_config",
         type=str,
-        required=True,
-        help="path to train.yaml"
+        default="config/LJSpeech/train.yaml"
     )
 
     parser.add_argument(
@@ -77,6 +83,7 @@ def read_lexicon(lex_path):
                 lexicon[word.lower()] = phones
     return lexicon
 
+
 def preprocess_english(
     texts: List[str],
     preprocess_config
@@ -110,62 +117,11 @@ def preprocess_english(
         sequences.append(sequence)
     return sequences
 
-def synthesize(
-    model: torch.nn.Module,
-    configs: Tuple[dict, dict, dict],
-    vocoder: torch.nn.Module,
-    batchs: List[tuple],
-    control_values: Tuple[float, float, float],
-    device: str
-):
-    preprocess_config, model_config, train_config = configs
-    pitch_control, energy_control, duration_control = control_values
-
-    for batch in batchs:
-        batch = to_device(batch, device)
-        with torch.no_grad():
-            # Forward
-            output = model(
-                *(batch[2:]),
-                p_control=pitch_control,
-                e_control=energy_control,
-                d_control=duration_control
-            )
-            synth_samples(
-                batch,
-                output,
-                vocoder,
-                model_config,
-                preprocess_config,
-                train_config["path"]["result_path"],
-            )
 
 if __name__ == "__main__":
     args = parse_args()
-    device = "cpu"
     preprocess_config = yaml.load(open(args.preprocess_config, "r"), Loader=yaml.FullLoader)
-    model_config = yaml.load(open(args.model_config, "r"), Loader=yaml.FullLoader)
-    train_config = yaml.load(open(args.train_config, "r"), Loader=yaml.FullLoader)
-    
-    model = FastSpeech2.build(
-        preprocess_config,
-        model_config,
-        device=device
-    )
 
-    name = model_config["vocoder"]["model"]
-    speaker = model_config["vocoder"]["speaker"]
-
-    if name == "HiFi-GAN":
-        vocoder_config = yaml.load(open("config/hifigan/model.yaml", "r"), Loader=yaml.FullLoader)
-        vocoder = Generator.build(
-            vocoder_config,
-            speaker=speaker,
-            device=device
-        )
-    else:
-        raise NotImplementedError(name)
-    
     raw_texts = [
         "Learning feature interactions is crucial for click-through rate (CTR) prediction in recommender systems.",
         "In most existing deep learning models, feature interactions are either manually designed or simply enumerated.",
@@ -177,32 +133,52 @@ if __name__ == "__main__":
         "By implementing a regularized optimizer over the architecture parameters, the model can automatically identify and remove the redundant feature interactions during the training process of the model.",
         "In the re-train stage, we keep the architecture parameters serving as an attention unit to further boost the performance.",
         "Offline experiments on three large-scale datasets (two public benchmarks, one private) demonstrate that AutoFIS can significantly improve various FM based models.",
-        "AutoFIS has been deployed onto the training platform of Huawei App Store recommendation service, where a 10-day online A/B test demonstrated that AutoFIS improved the DeepFM model by 20.3% and 20.1% in terms of CTR and CVR respectively."
+        "AutoFIS has been deployed onto the training platform of Huawei App Store recommendation service, where a 10-day online A/B test demonstrated that AutoFIS improved the DeepFM model by 20,3 and 20,1 percent in terms of CTR and CVR respectively."
     ]
 
     speakers = np.array([args.speaker_id] * len(raw_texts))
-
-    if preprocess_config["preprocessing"]["text"]["language"] == "en":
-        phonems = preprocess_english(
-            raw_texts, 
-            preprocess_config
-        )
-        
-    else:
-        NotImplementedError("{} language preprocessing not implemented".format(preprocess_config["preprocessing"]["text"]["language"]))
-    
-    phonem_lens = np.array([len(p) for p in phonems])
-    phonems = pad_1D(phonems)
-    batchs = [("paper-1", raw_texts, speakers, phonems, phonem_lens, max(phonem_lens))]
-
-    control_values = args.pitch_control, args.energy_control, args.duration_control
-    configs = (preprocess_config, model_config, train_config)
-
-    synthesize(
-        model,
-        configs,
-        vocoder,
-        batchs,
-        control_values,
-        device
+    phonems = preprocess_english(
+        raw_texts, 
+        preprocess_config
     )
+        
+    phonems_len = np.array([len(p) for p in phonems])
+    phonems = pad_1D(phonems)
+    batch = Batch(
+        doc_id="tracing",
+        texts=raw_texts, 
+        speakers=speakers,
+        phonems=phonems,
+        phonems_len=phonems_len,
+    )
+
+    batch = to_device(batch, "cpu")
+
+    example_inputs = dict(
+        speakers=batch.speakers,
+        phonems=batch.phonems,
+        phonems_len=batch.phonems_len,
+        pitch_control=1.0,
+        energy_control=1.0,
+        duration_control=1.0
+    )
+
+    jit_module = torch.jit.load('traced.pt')
+    with torch.no_grad():
+        wavs, lengths = jit_module(**example_inputs)
+
+
+    gens = []
+    for i, (wav, len) in enumerate(zip(wavs, lengths)):
+        wav = wav[: len]
+        gens.append(wav)
+    
+
+    sampling_rate = preprocess_config["preprocessing"]["audio"]["sampling_rate"]
+    wavfile.write(
+        "{}.wav".format(batch.doc_id), 
+        sampling_rate,
+        np.concatenate(gens)
+    )
+
+    print("done")

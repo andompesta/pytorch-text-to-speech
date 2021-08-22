@@ -19,7 +19,7 @@ class ScaledDotProductAttention(nn.Module):
         q: torch.Tensor, 
         k: torch.Tensor, 
         v: torch.Tensor, 
-        mask: Optional[torch.Tensor]=None
+        mask: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
 
         attn = torch.bmm(q, k.transpose(1, 2))

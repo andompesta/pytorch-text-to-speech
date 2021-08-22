@@ -2,6 +2,7 @@ from typing import Optional, Tuple, Union
 
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import Tensor
 
 from .multihead_attention import MultiHeadAttention
 from .positionwise_feed_forward import PositionwiseFeedForward
@@ -35,9 +36,17 @@ class FFTBlock(nn.Module):
             dropout=dropout
         )
 
-    def forward(self, enc_input, mask=None, slf_attn_mask=None):
+    def forward(
+        self,
+        enc_input: Tensor,
+        mask: Tensor,
+        slf_attn_mask: Tensor
+    ):
         enc_output, enc_slf_attn = self.slf_attn(
-            enc_input, enc_input, enc_input, mask=slf_attn_mask
+            enc_input, 
+            enc_input,
+            enc_input,
+            mask=slf_attn_mask
         )
         enc_output = enc_output.masked_fill(mask.unsqueeze(-1), 0)
 
