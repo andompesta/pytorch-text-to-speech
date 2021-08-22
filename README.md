@@ -1,6 +1,6 @@
 # pytorch-text-to-speech
 
-This repo contains a pytorch-tracable version of the (**FastSpeech2**)[https://arxiv.org/abs/2006.04558v1] model.
+This repo contains a pytorch-tracable version of the [**FastSpeech2**](https://arxiv.org/abs/2006.04558v1) model.
 Note that the original code-base is taken from [ming024](https://github.com/ming024/FastSpeech2) implementation. Thus, please download the original model according to its specification.
 
 As this repo focus on tracing, the training code has been stripped by all the knowledge distillation code: so, it can't be directly used to train or finetune a new model.
