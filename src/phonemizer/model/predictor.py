@@ -2,10 +2,9 @@ from typing import Dict, List, Tuple
 
 import torch
 from src.phonemizer import Prediction
-from src.phonemizer.preprocessing import Preprocessor
+from src.phonemizer.preprocessing import Preprocessor, batchify, product
 from .model import load_checkpoint
 from .utils import _get_len_util_stop
-from src.phonemizer.preprocessing.utils import _batchify, _product
 from torch.nn.utils.rnn import pad_sequence
 
 
@@ -79,7 +78,7 @@ class Predictor:
                     word=word,
                     phonemes="".join(out_phons),
                     phoneme_tokens=out_phons_tokens,
-                    confidence=_product(probs),
+                    confidence=product(probs),
                     token_probs=probs,
                 )
             )
@@ -94,7 +93,7 @@ class Predictor:
         """
 
         predictions = dict()
-        text_batches = _batchify(texts, batch_size)
+        text_batches = batchify(texts, batch_size)
         for text_batch in text_batches:
             input_batch, lens_batch = [], []
             for text in text_batch:

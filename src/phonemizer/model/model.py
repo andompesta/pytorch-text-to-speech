@@ -10,7 +10,7 @@ from src.phonemizer.model.utils import (
     _make_len_mask,
     get_dedup_tokens,
 )
-from src.phonemizer.preprocessing.text import Preprocessor
+from src.phonemizer.preprocessing import Preprocessor
 from torch.nn import LayerNorm, TransformerEncoder, TransformerEncoderLayer
 
 
