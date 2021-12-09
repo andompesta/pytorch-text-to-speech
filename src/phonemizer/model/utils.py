@@ -7,9 +7,9 @@ from torch.nn.utils.rnn import pad_sequence
 
 class PositionalEncoding(torch.nn.Module):
     def __init__(
-        self, 
-        d_model: int, 
-        dropout=0.1, 
+        self,
+        d_model: int,
+        dropout=0.1,
         max_len=5000,
     ) -> None:
         """

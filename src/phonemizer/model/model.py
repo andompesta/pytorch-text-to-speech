@@ -4,6 +4,8 @@ from typing import Any, Dict, Tuple
 
 import torch
 import torch.nn as nn
+from torch.nn import LayerNorm, TransformerEncoder, TransformerEncoderLayer
+
 from src.phonemizer.model.utils import (
     PositionalEncoding,
     _generate_square_subsequent_mask,
@@ -11,7 +13,6 @@ from src.phonemizer.model.utils import (
     get_dedup_tokens,
 )
 from src.phonemizer.preprocessing import Preprocessor
-from torch.nn import LayerNorm, TransformerEncoder, TransformerEncoderLayer
 
 
 class ModelType(Enum):
@@ -31,7 +32,7 @@ class Model(torch.nn.Module, ABC):
 
     @abstractmethod
     def generate(
-        self, 
+        self,
         batch: Dict[str, torch.Tensor],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -294,7 +295,7 @@ class AutoregressiveTransformer(Model):
 
 
 def create_model(
-    model_type: ModelType, 
+    model_type: ModelType,
     config: Dict[str, Any],
 ) -> Model:
     """
@@ -320,7 +321,7 @@ def create_model(
 
 
 def load_checkpoint(
-    checkpoint_path: str, 
+    checkpoint_path: str,
     device: str = "cpu",
 ) -> Tuple[Model, Dict[str, Any]]:
     """

@@ -4,10 +4,11 @@ from random import Random
 from typing import Iterable, List, Tuple
 
 import tqdm
-from dp.model.model import ModelType
-from dp.preprocessing.text import Preprocessor
-from dp.utils.io import pickle_binary, read_config
-from dp.utils.logging import get_logger
+
+from .model import ModelType
+from .preprocessing import Preprocessor
+from .utils.io import pickle_binary, read_config
+from .utils.logging import get_logger
 
 logger = get_logger(__name__)
 

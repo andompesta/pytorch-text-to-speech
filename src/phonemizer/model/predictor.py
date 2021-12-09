@@ -1,11 +1,13 @@
 from typing import Dict, List, Tuple
 
 import torch
+from torch.nn.utils.rnn import pad_sequence
+
 from src.phonemizer import Prediction
 from src.phonemizer.preprocessing import Preprocessor, batchify, product
+
 from .model import load_checkpoint
 from .utils import _get_len_util_stop
-from torch.nn.utils.rnn import pad_sequence
 
 
 class Predictor:
@@ -13,8 +15,8 @@ class Predictor:
     """Performs model predictions on a batch of inputs."""
 
     def __init__(
-        self, 
-        model: torch.nn.Module, 
+        self,
+        model: torch.nn.Module,
         preprocessor: Preprocessor,
     ) -> None:
         """
