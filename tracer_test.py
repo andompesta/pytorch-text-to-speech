@@ -9,7 +9,7 @@ import torch
 import yaml
 from scipy.io import wavfile
 
-from src.phonemizer.phonemizer import Phonemizer
+from g2p_en import G2p
 from src.text import text_to_sequence
 from src.utils import Batch, pad_1D, to_device
 
@@ -73,33 +73,30 @@ def preprocess_english(
     texts: List[str],
     preprocess_config,
 ) -> List[np.array]:
-    phonemizer = Phonemizer.from_checkpoint(
-        os.path.join(
-            "output",
-            "phonemizer",
-            "en_us_cmudict_forward.pt"
-        )
-    )
-    
     sequences = []
     for text in texts:
         text = text.rstrip(punctuation)
+        lexicon = read_lexicon(preprocess_config["path"]["lexicon_path"])
 
-        phonemes = phonemizer(
-            text,
-            lang='en_us',
-        )
+        g2p = G2p()
+        phones = []
+        words = re.split(r"([,;.\-\?\!\s+])", text)
+        words = filter(lambda x: x != " ", words)
 
-        phonemes = phonemes.replace("[", "{").replace("]", "}")
-        phonemes = re.sub(r"\{[^\w\s]?\}", "{sp}", phonemes)
-        phonemes = phonemes.replace("}{", " ")
+        for w in words:
+            if w.lower() in lexicon:
+                phones += lexicon[w.lower()]
+            else:
+                phones += g2p(w)
+        phones = "{" + "}{".join(phones) + "}"
+        phones = re.sub(r"\{[^\w\s]?\}", "{sp}", phones)
+        phones = phones.replace("}{", " ")
 
         print("Raw Text Sequence: {}".format(text))
-        print("Phoneme Sequence: {}".format(phonemes))
+        print("Phoneme Sequence: {}".format(phones))
         sequence = np.array(
             text_to_sequence(
-                phonemes,
-                preprocess_config["preprocessing"]["text"]["text_cleaners"],
+                phones, preprocess_config["preprocessing"]["text"]["text_cleaners"]
             )
         )
 

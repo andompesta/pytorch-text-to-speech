@@ -1,20 +1,17 @@
 import argparse
-from typing import List
 import re
-import yaml
+from string import punctuation
+from typing import List
+
 import numpy as np
 import torch
-from string import punctuation
+import yaml
 from g2p_en import G2p
 
-
-from src.models import Synthesizer, synthesizer
-from src.utils import (
-    to_device,
-    Batch,
-    pad_1D
-)
+from src.models import Synthesizer
 from src.text import text_to_sequence
+from src.utils import Batch, pad_1D, to_device
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -25,28 +22,16 @@ def parse_args() -> argparse.Namespace:
         help="speaker ID for multi-speaker synthesis, for single-sentence mode only",
     )
     parser.add_argument(
-        "-p",
-        "--preprocess_config",
-        type=str,
-        default="config/LJSpeech/preprocess.yaml"
+        "-p", "--preprocess_config", type=str, default="config/LJSpeech/preprocess.yaml"
     )
     parser.add_argument(
-        "-m", 
-        "--mel_config", 
-        type=str, 
-        default="config/LJSpeech/model.yaml" 
+        "-m", "--mel_config", type=str, default="config/LJSpeech/model.yaml"
     )
     parser.add_argument(
-        "-v", 
-        "--voc_config", 
-        type=str, 
-        default="config/hifigan/model.yaml"
+        "-v", "--voc_config", type=str, default="config/hifigan/model.yaml"
     )
     parser.add_argument(
-        "-t",
-        "--train_config",
-        type=str,
-        default="config/LJSpeech/train.yaml"
+        "-t", "--train_config", type=str, default="config/LJSpeech/train.yaml"
     )
 
     parser.add_argument(
@@ -83,10 +68,7 @@ def read_lexicon(lex_path):
     return lexicon
 
 
-def preprocess_english(
-    texts: List[str],
-    preprocess_config
-) -> List[np.array]:
+def preprocess_english(texts: List[str], preprocess_config) -> List[np.array]:
     sequences = []
     for text in texts:
         text = text.rstrip(punctuation)
@@ -108,8 +90,7 @@ def preprocess_english(
         print("Phoneme Sequence: {}".format(phones))
         sequence = np.array(
             text_to_sequence(
-                phones, 
-                preprocess_config["preprocessing"]["text"]["text_cleaners"]
+                phones, preprocess_config["preprocessing"]["text"]["text_cleaners"]
             )
         )
 
@@ -122,48 +103,33 @@ if __name__ == "__main__":
     device = "cpu"
 
     train_config = yaml.load(open(args.train_config, "r"), Loader=yaml.FullLoader)
-    preprocess_config = yaml.load(open(args.preprocess_config, "r"), Loader=yaml.FullLoader)
+    preprocess_config = yaml.load(
+        open(args.preprocess_config, "r"), Loader=yaml.FullLoader
+    )
 
     synthesizer = Synthesizer.build(
-        args.preprocess_config,
-        args.mel_config,
-        args.voc_config,
-        device
+        args.preprocess_config, args.mel_config, args.voc_config, device
     ).eval()
 
-
-    raw_texts = [
-        "lets try to trace this",
-        "maybe will works eventually"
-    ]
+    raw_texts = ["lets try to trace this", "maybe will works eventually"]
 
     speakers = np.array([args.speaker_id] * len(raw_texts))
 
-    phonems = preprocess_english(
-        raw_texts, 
-        preprocess_config
-    )
-        
+    phonems = preprocess_english(raw_texts, preprocess_config)
+
     phonems_len = np.array([len(p) for p in phonems])
     phonems = pad_1D(phonems)
     batch = Batch(
         doc_id="tracing",
-        texts=raw_texts, 
+        texts=raw_texts,
         speakers=speakers,
         phonems=phonems,
         phonems_len=phonems_len,
     )
-    
+
     batch = to_device(batch, "cpu")
 
-    example_inputs = (
-        batch.speakers,
-        batch.phonems,
-        batch.phonems_len,
-        1.0,
-        1.0,
-        1.0
-    )
+    example_inputs = (batch.speakers, batch.phonems, batch.phonems_len, 1.0, 1.0, 1.0)
 
     # control input
     control_raw_texts = [
@@ -172,22 +138,18 @@ if __name__ == "__main__":
 
     control_speakers = np.array([args.speaker_id] * len(control_raw_texts))
 
-    control_phonems = preprocess_english(
-        control_raw_texts, 
-        preprocess_config
-    )
-        
+    control_phonems = preprocess_english(control_raw_texts, preprocess_config)
+
     control_phonems_len = np.array([len(p) for p in control_phonems])
     control_phonems = pad_1D(control_phonems)
     control_batch = Batch(
         doc_id="tracing",
-        texts=control_raw_texts, 
+        texts=control_raw_texts,
         speakers=control_speakers,
         phonems=control_phonems,
         phonems_len=control_phonems_len,
     )
-    
-    
+
     control_values = args.pitch_control, args.energy_control, args.duration_control
 
     control_batch = to_device(control_batch, device)
@@ -198,9 +160,9 @@ if __name__ == "__main__":
         control_batch.phonems_len,
         1.0,
         1.0,
-        1.0
+        1.0,
     )
-    
+
     jit_module = torch.jit.script(synthesizer)
 
     print(jit_module.graph)
