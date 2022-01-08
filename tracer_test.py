@@ -1,5 +1,4 @@
 import argparse
-import os
 import re
 from string import punctuation
 from typing import List
@@ -7,9 +6,9 @@ from typing import List
 import numpy as np
 import torch
 import yaml
+from g2p_en import G2p
 from scipy.io import wavfile
 
-from g2p_en import G2p
 from src.text import text_to_sequence
 from src.utils import Batch, pad_1D, to_device
 
