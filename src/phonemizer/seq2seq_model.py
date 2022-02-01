@@ -1,5 +1,5 @@
-from torch import nn
 import torch
+from torch import nn
 
 
 class Seq2Seq(nn.Module):
@@ -20,9 +20,7 @@ class Seq2Seq(nn.Module):
         self.BOS_token = 2
 
         self.enc_emb = nn.Embedding(
-            self.in_embeddng_size, 
-            self.hidden_size,
-            padding_idx=self.PAD_token
+            self.in_embeddng_size, self.hidden_size, padding_idx=self.PAD_token
         )
 
         self.enc_gru = nn.GRU(
@@ -34,9 +32,8 @@ class Seq2Seq(nn.Module):
             bidirectional=False,
         )
 
-
         self.dec_emb = nn.Embedding(
-            self.out_embedding_size, 
+            self.out_embedding_size,
             self.hidden_size,
             padding_idx=self.PAD_token,
         )
@@ -51,16 +48,12 @@ class Seq2Seq(nn.Module):
         )
 
         self.fc = nn.Linear(
-            in_features=self.hidden_size, 
+            in_features=self.hidden_size,
             out_features=self.out_embedding_size,
-            bias=True
+            bias=True,
         )
 
-
-    def forward(
-        self, 
-        enc_input: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, enc_input: torch.Tensor) -> torch.Tensor:
         assert enc_input.size(0) == 1, "decoding allowed with 1 sindle word at time"
         num_batch = 1
 
@@ -69,11 +62,10 @@ class Seq2Seq(nn.Module):
         enc = self.enc_emb(enc_input)
         enc_output, enc_h = self.enc_gru(enc, enc_h)
 
-
         dec_input = torch.tensor([self.BOS_token]).unsqueeze(0).long()
         dec_h = enc_h
         preds = torch.zeros(self.max_decoding_steps).long()
-        
+
         for i in range(self.max_decoding_steps):
             dec = self.dec_emb(dec_input)
             dec_output, dec_h = self.dec_gru(dec, dec_h)
