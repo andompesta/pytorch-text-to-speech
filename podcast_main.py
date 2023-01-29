@@ -154,7 +154,7 @@ if __name__ == "__main__":
 
         if idx == 0:
             content = [
-                "Welcome to Zalando tech paper review.",
+                "Welcome to Climate Change AI tech paper review.",
                 f"Paper number: {idx + 1}.",
             ]
         else:
