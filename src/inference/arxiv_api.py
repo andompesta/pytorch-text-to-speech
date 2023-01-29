@@ -1,15 +1,17 @@
+from functools import reduce
+
 import arxiv
 import pandas as pd
 
 
 def get_arxiv_articles(
     query: str = 'all:"real-time bidding" OR all:"online advertisment" cat:cs',
-    time_delta: pd.Timedelta = pd.to_timedelta("7D")
+    time_delta: pd.Timedelta = pd.to_timedelta("7D"),
 ):
     search = arxiv.Search(
         query=query,
         max_results=100,
-        sort_by=arxiv.SortCriterion.LastUpdatedDate,
+        sort_by=arxiv.SortCriterion.SubmittedDate,
         sort_order=arxiv.SortOrder.Descending,
     )
 
@@ -17,21 +19,34 @@ def get_arxiv_articles(
     today = pd.Timestamp.now(tz="UTC").floor("D")
 
     results = filter(
-        lambda r: (today - time_delta) <= pd.to_datetime(r.published).floor("D") <= today,
+        lambda r: (today - time_delta)
+        <= pd.to_datetime(r.published).floor("D")
+        <= today,
         results,
     )
     return results
 
-if __name__ == "__main__":
-    results = get_arxiv_articles()
 
-    for idx, r in enumerate(results):
+if __name__ == "__main__":
+    results = get_arxiv_articles(
+        '(abs:"renewable energy" OR ti:"renewable energy" OR ti:"climate change" OR abs:"climate change")'
+    )
+
+    for idx, r in enumerate(
+        filter(
+            lambda r: reduce(
+                lambda v, c: v or ("cs" == c),
+                [c.split(".")[0] for c in r.categories],
+                False,
+            ),
+            results,
+        )
+    ):
         print(idx, r)
         print(r.title)
         print(r.published)
         print(r.summary)
 
-        for a in r.authors:
-            print(a.name)
-
+        print("\n".join([a.name for a in r.authors]))
+        print("\n".join(r.categories))
         print()

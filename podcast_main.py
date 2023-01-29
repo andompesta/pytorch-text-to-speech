@@ -1,5 +1,7 @@
 import argparse
 import re
+from datetime import datetime 
+from functools import reduce
 from string import punctuation
 from typing import Dict, List
 
@@ -129,8 +131,19 @@ if __name__ == "__main__":
     )
     synthesizer = torch.jit.load("./checkpoints/synthesizer/traced.pt")
 
-    articels = list(get_arxiv_articles())
-    for r in articels:
+    articles = get_arxiv_articles(
+        query='(abs:"renewable energy" OR ti:"renewable energy" OR ti:"climate change" OR abs:"climate change")',
+    )
+    articles = list(filter(
+        lambda r: reduce(
+            lambda v, c: v or ("cs" == c),
+            [c.split(".")[0] for c in r.categories],
+            False,
+        ),
+        articles,
+    ))
+
+    for r in articles:
         citations = 0
         for a in r.authors:
             authors_data = get_authors_citations(a.name)
@@ -138,16 +151,19 @@ if __name__ == "__main__":
             citations += citation
         r.score = citations / len(r.authors)
 
-    articels = sorted(articels, key=lambda r: r.score, reverse=True)
+    articles = sorted(articles, key=lambda r: r.score, reverse=True)
 
     vocalaized_summaries = []
 
-    for idx, a in enumerate(articels):
+    for idx, a in enumerate(articles):
 
         title_sentences = sent_detector.tokenize(a.title.strip())
         abstract_sentences = sent_detector.tokenize(a.summary.strip())
 
-        abstract_sentences = [s.replace("e.g.", "for example").replace("i.e.", "that is") for s in abstract_sentences]
+        abstract_sentences = [
+            s.replace("e.g.", "for example").replace("i.e.", "that is")
+            for s in abstract_sentences
+        ]
 
         if title_sentences[-1][-1] != ".":
             title_sentences[-1] = title_sentences[-1] + "."
@@ -174,7 +190,7 @@ if __name__ == "__main__":
         phonems_len = np.array([len(p) for p in phonems])
         phonems = pad_1D(phonems)
         batch = Batch(
-            doc_id="tracing",
+            doc_id=a.entry_id,
             texts=content,
             speakers=speakers,
             phonems=phonems,
@@ -206,7 +222,7 @@ if __name__ == "__main__":
 
     sampling_rate = preprocess_config["preprocessing"]["audio"]["sampling_rate"]
     wavfile.write(
-        "{}.wav".format(batch.doc_id),
+        f"podcast_{datetime.now().date()}.wav",
         sampling_rate,
         np.concatenate(vocalaized_summaries),
     )
