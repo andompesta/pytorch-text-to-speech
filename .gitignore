@@ -108,6 +108,7 @@ celerybeat.pid
 
 .trunk
 .vscode
+checkpoints
 
 # Environments
 .venv
