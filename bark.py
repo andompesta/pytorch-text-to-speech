@@ -10,11 +10,9 @@ processor = AutoProcessor.from_pretrained(
 model = AutoModel.from_pretrained(
     "suno/bark",
     cache_dir="checkpoints/bark/model",
-    # torch_dtype=torch.float16,
 )
 model.to("cuda")
 model = model.to_bettertransformer()
-# model.enable_cpu_offload()
 sampling_rate = model.generation_config.sample_rate
 
 
@@ -29,21 +27,20 @@ for sentence in [
 ]:
     inputs = processor(
         text=sentence,
-        voice_preset="en_speaker_1",
+        voice_preset="v2/en_speaker_6",
         return_tensors="pt",
-        # max_length=max_lenght,
     )
 
     for key, value in inputs.items():
         inputs[key] = value.to("cuda")
 
-    speech_values = model.generate(**inputs,)
+    speech_values = model.generate(**inputs, semantic_temperature=0.6)
     wave_collector.append(
         speech_values.cpu().numpy().flatten()
     )
 
 scipy.io.wavfile.write(
-    "bark_out.wav",
+    "bark_out_.wav",
     rate=sampling_rate,
     data=np.concatenate(wave_collector),
 )
